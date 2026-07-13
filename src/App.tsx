@@ -724,7 +724,7 @@ Réponds UNIQUEMENT avec un tableau JSON valide, sans aucun texte autour, sans b
 [{"matricule":"24-CM2-001","note":14,"perf":15}]
 Utilise null pour perf si elle n'est pas visible sur la feuille. Si tu ne peux pas identifier le matricule d'une ligne avec certitude, ignore cette ligne.`;
 
-      const response = await fetch("http://localhost:3001/api/scan", {
+const API_URL = 'https://mastanote-backend.onrender.com/api/scan'; {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
