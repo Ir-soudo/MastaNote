@@ -1,6 +1,30 @@
 import React, { useState, useEffect, useRef } from 'react';
 import * as XLSX from 'xlsx';
-import { BookOpen, Users, Plus, Download, Mic, MicOff, CircleCheck as CheckCircle, CreditCard, TrendingUp, Award, TriangleAlert as AlertTriangle, FileSpreadsheet, Trash2, ChevronRight, ArrowLeft, Settings, Lock, Check, Camera, Sparkles, Image as ImageIcon, RotateCcw, Upload } from 'lucide-react';
+import {
+  BookOpen,
+  Users,
+  Plus,
+  Download,
+  Mic,
+  MicOff,
+  CheckCircle,
+  CreditCard,
+  TrendingUp,
+  Award,
+  AlertTriangle,
+  FileSpreadsheet,
+  Trash2,
+  ChevronRight,
+  ArrowLeft,
+  Settings,
+  Lock,
+  Check,
+  Camera,
+  Sparkles,
+  Image as ImageIcon,
+  RotateCcw,
+  Upload
+} from 'lucide-react';
 
 // --- CONFIGURATION ET COMPOSANTS PRINCIPAUX ---
 
@@ -32,6 +56,12 @@ const KKIAPAY_PUBLIC_KEY = "8d6ab7c07ca711f19bbfd97182685e03";
 // Mettez sandbox à false lors du passage en production
 const KKIAPAY_SANDBOX = false;
 
+// --- CONFIGURATION BACKEND SCANNER IA (Render) ---
+// Ce backend reçoit { imageBase64, mediaType, promptText }, appelle l'API Anthropic
+// côté serveur (clé API jamais exposée au client) et renvoie { content: "<texte JSON>" }.
+// Adaptez cette URL et le format ci-dessus si votre backend Render utilise un contrat différent.
+const SCAN_API_URL = 'https://mastanote-backend.onrender.com/api/scan';
+
 // Liste d'élèves par défaut pour l'exemple
 const ELEVES_INITIAL_CM2 = [
   { id: '1', matricule: '24-CM2-001', nom: 'ABALO', prenoms: 'Sena Jean' },
@@ -60,10 +90,10 @@ export default function App() {
   ]);
   const [selectedClassId, setSelectedClassId] = useState('class-1');
   const [activeTab, setActiveTab] = useState('dashboard'); // dashboard, saisie, eleves, scan, parametres
-  
+
   // Matière active pour la saisie
   const [activeMatiere, setActiveMatiere] = useState('maths');
-  
+
   // Stockage des notes : { [classeId]: { [matiereId]: { [eleveId]: { note: X, perf: Y } } } }
   const [notes, setNotes] = useState({
     'class-1': {
@@ -91,7 +121,7 @@ export default function App() {
   const [newClassName, setNewClassName] = useState('');
   const [newClassNiveau, setNewClassNiveau] = useState('CM2');
   const [showAddClassModal, setShowAddClassModal] = useState(false);
-  
+
   // États pour l'ajout d'élèves
   const [newStudentNom, setNewStudentNom] = useState('');
   const [newStudentPrenoms, setNewStudentPrenoms] = useState('');
@@ -100,7 +130,7 @@ export default function App() {
   // États pour l'IA Vocale
   const [isListening, setIsListening] = useState(false);
   const [voiceStatus, setVoiceStatus] = useState('Cliquez sur le micro pour parler');
-  
+
   // États pour le Paywall
   const [paywallModal, setPaywallModal] = useState(false);
   const [selectedPlanId, setSelectedPlanId] = useState('1an');
@@ -114,6 +144,7 @@ export default function App() {
   const [scanStatus, setScanStatus] = useState('idle'); // idle, analyzing, review, error
   const [scanResults, setScanResults] = useState([]);
   const [scanErrorMsg, setScanErrorMsg] = useState('');
+  const [scanProgressMsg, setScanProgressMsg] = useState('');
 
   const recognitionRef = useRef(null);
   const planRef = useRef(selectedPlanId);
@@ -238,7 +269,7 @@ export default function App() {
   const processVoiceCommand = (text) => {
     setVoiceStatus(`Reconnu : "${text}"`);
     const cleanText = text.toLowerCase().trim();
-    
+
     const numberPattern = /([0-9]+[.,]?[0-9]*)/g;
     const matches = cleanText.match(numberPattern);
 
@@ -307,18 +338,22 @@ export default function App() {
       return;
     }
 
+    // Mise à jour immuable : on ne modifie jamais un objet existant du state en place,
+    // on reconstruit systématiquement des copies à chaque niveau.
     setNotes(prev => {
       const classData = prev[selectedClassId] || {};
       const matiereData = classData[activeMatiere] || {};
-      matiereData[activeEleve.id] = {
-        note: tempNote !== '' ? n : undefined,
-        perf: tempPerf !== '' ? p : undefined
-      };
       return {
         ...prev,
         [selectedClassId]: {
           ...classData,
-          [activeMatiere]: matiereData
+          [activeMatiere]: {
+            ...matiereData,
+            [activeEleve.id]: {
+              note: tempNote !== '' ? n : undefined,
+              perf: tempPerf !== '' ? p : undefined
+            }
+          }
         }
       };
     });
@@ -378,6 +413,18 @@ export default function App() {
     triggerNotif(`Classe "${activeClass.nom}" supprimée.`);
   };
 
+  // Génère un matricule unique (non déjà utilisé dans la classe active) si aucun n'est fourni
+  const generateUniqueMatricule = () => {
+    const existing = new Set(activeClass.eleves.map(el => el.matricule));
+    let candidate;
+    let attempts = 0;
+    do {
+      candidate = `24-${activeClass.niveau}-${Math.floor(100 + Math.random() * 900)}`;
+      attempts++;
+    } while (existing.has(candidate) && attempts < 50);
+    return candidate;
+  };
+
   const handleAddStudent = (e) => {
     if (e && e.preventDefault) e.preventDefault();
     if (!newStudentNom.trim() || !newStudentPrenoms.trim()) {
@@ -385,7 +432,7 @@ export default function App() {
       return;
     }
 
-    const matriculeGenere = newStudentMatricule.trim() || `24-${activeClass.niveau}-${Math.floor(100 + Math.random() * 900)}`;
+    const matriculeGenere = newStudentMatricule.trim() || generateUniqueMatricule();
 
     const newStudent = {
       id: `student-${Date.now()}`,
@@ -425,15 +472,40 @@ export default function App() {
 
   // --- IMPORTATION RAPIDE DU CANEVAS EDUCMASTER (CSV / TXT / XLSX / XLS) ---
   // Structure attendue (avec en-tête à ignorer) : Matricule | Nom | Prénom
-  // Séparateur CSV/TXT : virgule (,) ou point-virgule (;)
+  // Les colonnes sont détectées par le NOM de l'en-tête (accent/casse insensible),
+  // avec repli sur l'ordre 1=Matricule, 2=Nom, 3=Prénom si la détection échoue.
+
+  const normalizeHeader = (s) => (s ?? '').toString().toLowerCase()
+    .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+    .trim();
+
+  const detectColumns = (headerRow) => {
+    const normalized = (headerRow || []).map(normalizeHeader);
+
+    const idxPrenom = normalized.findIndex(h => h.includes('prenom'));
+    const idxMatricule = normalized.findIndex(h => h.includes('matricule'));
+    const idxNom = normalized.findIndex((h, i) =>
+      i !== idxPrenom && (h === 'nom' || h.startsWith('nom ') || h.includes('nom de famille') || h === 'noms')
+    );
+
+    const detectionComplete = idxMatricule !== -1 && idxNom !== -1 && idxPrenom !== -1;
+
+    return detectionComplete
+      ? { matricule: idxMatricule, nom: idxNom, prenoms: idxPrenom }
+      : { matricule: 0, nom: 1, prenoms: 2 }; // repli sur l'ordre standard EducMaster
+  };
+
   const rowsFromCsvText = (rawText) => {
     const lines = rawText.split(/\r\n|\n|\r/).filter(l => l.trim() !== '');
     if (lines.length < 2) return [];
 
     const headerLine = lines[0];
-    const commaCount = (headerLine.match(/,/g) || []).length;
-    const semiCount = (headerLine.match(/;/g) || []).length;
-    const separator = semiCount > commaCount ? ';' : ',';
+    const counts = {
+      ',': (headerLine.match(/,/g) || []).length,
+      ';': (headerLine.match(/;/g) || []).length,
+      '\t': (headerLine.match(/\t/g) || []).length
+    };
+    const separator = Object.entries(counts).sort((a, b) => b[1] - a[1])[0][0];
 
     const cleanCell = (cell) => cell.trim().replace(/^"+|"+$/g, '').trim();
 
@@ -442,20 +514,34 @@ export default function App() {
 
   const rowsFromWorkbook = (arrayBuffer) => {
     const workbook = XLSX.read(arrayBuffer, { type: 'array' });
-    const firstSheetName = workbook.SheetNames[0];
-    const sheet = workbook.Sheets[firstSheetName];
-    // header: 1 => tableau de tableaux brut, une ligne par ligne de la feuille
+
+    // Cherche la feuille dont l'en-tête contient "matricule" (au cas où la première
+    // feuille du classeur serait une page d'instructions plutôt que le listing réel).
+    let chosenSheetName = workbook.SheetNames[0];
+    for (const sheetName of workbook.SheetNames) {
+      const preview = XLSX.utils.sheet_to_json(workbook.Sheets[sheetName], { header: 1, raw: false, defval: '' });
+      const headerRow = preview[0] || [];
+      if (headerRow.some(h => normalizeHeader(h).includes('matricule'))) {
+        chosenSheetName = sheetName;
+        break;
+      }
+    }
+
+    const sheet = workbook.Sheets[chosenSheetName];
     return XLSX.utils.sheet_to_json(sheet, { header: 1, raw: false, defval: '' });
   };
 
   const studentsFromRows = (rows) => {
+    if (!rows || rows.length < 2) return [];
+    const cols = detectColumns(rows[0]);
+
     const students = [];
     rows.slice(1).forEach((row) => {
-      if (!row || row.length < 2) return;
+      if (!row || row.length === 0) return;
 
-      const matricule = (row[0] ?? '').toString().trim();
-      const nom = (row[1] ?? '').toString().trim();
-      const prenoms = (row[2] ?? '').toString().trim();
+      const matricule = (row[cols.matricule] ?? '').toString().trim();
+      const nom = (row[cols.nom] ?? '').toString().trim();
+      const prenoms = (row[cols.prenoms] ?? '').toString().trim();
 
       if (!matricule || !nom) return;
 
@@ -582,7 +668,7 @@ export default function App() {
   // --- ALGORITHMES ET CALCUL DES STATISTIQUES ---
   const getClassStats = () => {
     if (!activeClass || activeClass.eleves.length === 0) return { moyenne: 0, taux: 0, top: '-', flop: '-' };
-    
+
     const matNotes = notes[selectedClassId]?.[activeMatiere] || {};
     let total = 0;
     let count = 0;
@@ -599,7 +685,7 @@ export default function App() {
         total += n;
         count++;
         if (n >= 10) admis++;
-        
+
         if (n > maxNote) {
           maxNote = n;
           topStudent = `${el.nom} ${el.prenoms}`;
@@ -622,6 +708,10 @@ export default function App() {
   };
 
   const stats = getClassStats();
+
+  // Échappe correctement une valeur pour l'insérer dans une cellule CSV
+  // (double les guillemets internes pour éviter de casser le fichier)
+  const escapeCsv = (val) => `"${String(val ?? '').replace(/"/g, '""')}"`;
 
   // --- EXPORTATEUR DE CLASSE VERS CANVAS EDUCMASTER ---
   const exportToEducMaster = () => {
@@ -648,8 +738,8 @@ export default function App() {
     csvContent += "\n";
 
     activeClass.eleves.forEach(el => {
-      let row = `"${el.matricule}","${el.nom}","${el.prenoms}"`;
-      
+      let row = `${escapeCsv(el.matricule)},${escapeCsv(el.nom)},${escapeCsv(el.prenoms)}`;
+
       MATIERES_PRIMAIRE.forEach(m => {
         const studentNote = notes[selectedClassId]?.[m.id]?.[el.id] || {};
         const nObtenu = studentNote.note !== undefined ? studentNote.note : "";
@@ -708,6 +798,19 @@ export default function App() {
     if (!scanImage || !activeClass) return;
     setScanStatus('analyzing');
     setScanErrorMsg('');
+    setScanProgressMsg("Analyse en cours...");
+
+    // Le backend Render (offre gratuite) peut être en veille après une période
+    // d'inactivité et mettre jusqu'à 60s à redémarrer. On prévient l'enseignant
+    // plutôt que de le laisser croire que l'appli est bloquée.
+    const coldStartTimer = setTimeout(() => {
+      setScanProgressMsg("Le serveur se réveille peut-être (jusqu'à 60 secondes après une période d'inactivité)... Merci de patienter.");
+    }, 5000);
+
+    // On borne l'attente à 90s pour éviter un blocage indéfini si le serveur
+    // ne répond vraiment pas.
+    const controller = new AbortController();
+    const abortTimer = setTimeout(() => controller.abort(), 90000);
 
     try {
       const roster = activeClass.eleves
@@ -724,14 +827,17 @@ Réponds UNIQUEMENT avec un tableau JSON valide, sans aucun texte autour, sans b
 [{"matricule":"24-CM2-001","note":14,"perf":15}]
 Utilise null pour perf si elle n'est pas visible sur la feuille. Si tu ne peux pas identifier le matricule d'une ligne avec certitude, ignore cette ligne.`;
 
-const API_URL = 'https://mastanote-backend.onrender.com/api/scan'; {
+      // Appel à votre backend Render (proxy sécurisé vers l'API Anthropic).
+      // Adaptez les noms de champs ci-dessous si votre backend attend un autre format.
+      const response = await fetch(SCAN_API_URL, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           imageBase64: scanImage.base64,
           mediaType: scanImage.mediaType,
           promptText
-        })
+        }),
+        signal: controller.signal
       });
 
       if (!response.ok) {
@@ -740,7 +846,7 @@ const API_URL = 'https://mastanote-backend.onrender.com/api/scan'; {
       }
 
       const data = await response.json();
-      const textBlock = data.content || '';
+      const textBlock = typeof data.content === 'string' ? data.content : '';
       const clean = textBlock.replace(/```json|```/g, '').trim();
       const parsedArr = JSON.parse(clean);
 
@@ -772,7 +878,15 @@ const API_URL = 'https://mastanote-backend.onrender.com/api/scan'; {
     } catch (err) {
       console.error(err);
       setScanStatus('error');
-      setScanErrorMsg("L'analyse a échoué. Vérifiez la netteté de la photo et réessayez.");
+      if (err && err.name === 'AbortError') {
+        setScanErrorMsg("Le serveur met trop de temps à répondre (plus de 90 secondes). Il devrait être réveillé maintenant : réessayez.");
+      } else {
+        setScanErrorMsg(err?.message || "L'analyse a échoué. Vérifiez la netteté de la photo et réessayez.");
+      }
+    } finally {
+      clearTimeout(coldStartTimer);
+      clearTimeout(abortTimer);
+      setScanProgressMsg('');
     }
   };
 
@@ -821,7 +935,7 @@ const API_URL = 'https://mastanote-backend.onrender.com/api/scan'; {
 
   return (
     <div className="min-h-screen bg-slate-900 text-slate-100 flex flex-col font-sans selection:bg-indigo-500 selection:text-white">
-      
+
       {/* --- BANDEAU D'ALERTE DE NOTIFICATION --- */}
       {notif && (
         <div className={`fixed top-4 left-1/2 transform -translate-x-1/2 z-50 px-4 py-3 rounded-xl shadow-2xl flex items-center gap-2 border text-sm transition-all duration-300 animate-bounce max-w-[90vw] ${
@@ -854,7 +968,7 @@ const API_URL = 'https://mastanote-backend.onrender.com/api/scan'; {
 
           <div className="flex items-center gap-2">
             {user.statut_abonnement === 'demo' ? (
-              <button 
+              <button
                 onClick={() => setPaywallModal(true)}
                 className="bg-gradient-to-r from-amber-500 to-orange-500 text-slate-950 font-bold text-xs px-3.5 py-2 rounded-xl flex items-center gap-1.5 hover:opacity-95 transition-all shadow-lg shadow-orange-500/10"
               >
@@ -867,8 +981,8 @@ const API_URL = 'https://mastanote-backend.onrender.com/api/scan'; {
                 Premium ({user.plan})
               </span>
             )}
-            
-            <button 
+
+            <button
               onClick={() => setActiveTab('parametres')}
               className={`p-2 rounded-xl border transition-colors ${activeTab === 'parametres' ? 'bg-slate-800 border-slate-700 text-white' : 'border-slate-800 hover:bg-slate-900 text-slate-400'}`}
               title="Paramètres"
@@ -978,7 +1092,7 @@ const API_URL = 'https://mastanote-backend.onrender.com/api/scan'; {
         {paywallModal && (
           <div className="fixed inset-0 bg-slate-950/90 backdrop-blur-md flex items-center justify-center p-4 z-50 overflow-y-auto">
             <div className="bg-slate-900 border border-slate-800 rounded-3xl p-6 w-full max-w-lg shadow-2xl relative my-8">
-              <button 
+              <button
                 onClick={() => { setPaywallModal(false); setPaymentStep('form'); }}
                 className="absolute top-4 right-4 text-slate-400 hover:text-white text-lg font-bold"
               >
@@ -1144,17 +1258,17 @@ const API_URL = 'https://mastanote-backend.onrender.com/api/scan'; {
         {/* --- CONTENU DE L'ONGLET TABLEAU DE BORD --- */}
         {activeTab === 'dashboard' && (
           <div className="space-y-6">
-            
+
             <div className="bg-gradient-to-br from-indigo-950 via-slate-900 to-slate-950 border border-indigo-500/20 rounded-3xl p-6 relative overflow-hidden shadow-xl">
               <div className="absolute top-0 right-0 p-4 opacity-5 pointer-events-none">
                 <FileSpreadsheet className="w-64 h-64" />
               </div>
-              
+
               <div className="flex flex-col md:flex-row md:items-center justify-between gap-6 relative z-10">
                 <div>
                   <h2 className="font-extrabold text-xl sm:text-2xl text-white">Classe active : {activeClass?.nom}</h2>
                   <p className="text-slate-400 text-sm mt-1">Saisissez les notes puis générez le fichier compatible avec le portail officiel EducMaster Bénin.</p>
-                  
+
                   <div className="flex flex-wrap gap-2 mt-4">
                     <span className="bg-slate-800 text-slate-300 text-xs px-3 py-1.5 rounded-xl font-medium">
                       {activeClass?.eleves.length || 0} Élèves
@@ -1192,8 +1306,8 @@ const API_URL = 'https://mastanote-backend.onrender.com/api/scan'; {
                     key={m.id}
                     onClick={() => setActiveMatiere(m.id)}
                     className={`px-3 py-2 text-xs font-bold rounded-xl border shrink-0 transition-all ${
-                      activeMatiere === m.id 
-                        ? 'bg-indigo-500/10 border-indigo-500 text-indigo-400' 
+                      activeMatiere === m.id
+                        ? 'bg-indigo-500/10 border-indigo-500 text-indigo-400'
                         : 'bg-slate-950 border-slate-800/80 text-slate-400 hover:text-slate-300'
                     }`}
                   >
@@ -1246,7 +1360,7 @@ const API_URL = 'https://mastanote-backend.onrender.com/api/scan'; {
             </div>
 
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-              
+
               <div className="bg-slate-950 border border-slate-800/80 rounded-2xl p-5 lg:col-span-2">
                 <h4 className="font-bold text-white mb-4 flex items-center gap-2">
                   <FileSpreadsheet className="text-indigo-400 w-5 h-5" />
@@ -1338,10 +1452,10 @@ const API_URL = 'https://mastanote-backend.onrender.com/api/scan'; {
         {/* --- ONGLET SAISIE MOBILE-FIRST EXPRESS --- */}
         {activeTab === 'saisie' && activeClass?.eleves.length > 0 && (
           <div className="max-w-xl mx-auto w-full space-y-6">
-            
+
             <div className="flex items-center justify-between">
-              <button 
-                onClick={() => setActiveTab('dashboard')} 
+              <button
+                onClick={() => setActiveTab('dashboard')}
                 className="text-slate-400 hover:text-white flex items-center gap-1.5 text-sm font-medium"
               >
                 <ArrowLeft className="w-4 h-4" />
@@ -1394,8 +1508,8 @@ const API_URL = 'https://mastanote-backend.onrender.com/api/scan'; {
                   <button
                     onClick={toggleListening}
                     className={`p-4 rounded-full shadow-lg transition-all ${
-                      isListening 
-                        ? 'bg-rose-600 text-white animate-pulse shadow-rose-900/20' 
+                      isListening
+                        ? 'bg-rose-600 text-white animate-pulse shadow-rose-900/20'
                         : 'bg-indigo-600 hover:bg-indigo-700 text-white shadow-indigo-900/20'
                     }`}
                   >
@@ -1469,8 +1583,8 @@ const API_URL = 'https://mastanote-backend.onrender.com/api/scan'; {
         {activeTab === 'scan' && (
           <div className="max-w-2xl mx-auto w-full space-y-6">
             <div className="flex items-center justify-between">
-              <button 
-                onClick={() => setActiveTab('dashboard')} 
+              <button
+                onClick={() => setActiveTab('dashboard')}
                 className="text-slate-400 hover:text-white flex items-center gap-1.5 text-sm font-medium"
               >
                 <ArrowLeft className="w-4 h-4" />
@@ -1576,6 +1690,12 @@ const API_URL = 'https://mastanote-backend.onrender.com/api/scan'; {
                       )}
                     </button>
                   </div>
+
+                  {scanStatus === 'analyzing' && scanProgressMsg && (
+                    <p className="text-center text-xs text-slate-400 italic">
+                      {scanProgressMsg}
+                    </p>
+                  )}
                 </div>
               )}
 
@@ -1692,7 +1812,7 @@ const API_URL = 'https://mastanote-backend.onrender.com/api/scan'; {
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-            
+
               <div className="bg-slate-950 border border-slate-800 rounded-2xl p-5 space-y-4 h-fit">
                 <h4 className="font-bold text-white text-md flex items-center gap-2">
                   <Plus className="text-indigo-400" />
@@ -1800,10 +1920,10 @@ const API_URL = 'https://mastanote-backend.onrender.com/api/scan'; {
         {activeTab === 'parametres' && (
           <div className="max-w-2xl mx-auto w-full space-y-6">
             <h3 className="font-bold text-xl text-white">Paramètres généraux</h3>
-            
+
             <div className="bg-slate-950 border border-slate-800 rounded-2xl p-5 space-y-4">
               <h4 className="font-bold text-slate-200 text-sm">Profil Enseignant</h4>
-              
+
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
                   <label className="block text-xs font-semibold text-slate-400 mb-1">Nom d'Enseignant</label>
@@ -1829,13 +1949,13 @@ const API_URL = 'https://mastanote-backend.onrender.com/api/scan'; {
 
             <div className="bg-slate-950 border border-slate-800 rounded-2xl p-5 space-y-4">
               <h4 className="font-bold text-slate-200 text-sm">Informations de licence</h4>
-              
+
               <div className="flex flex-col sm:flex-row justify-between sm:items-center gap-3 bg-slate-900 p-4 rounded-xl border border-slate-800">
                 <div>
                   <p className="text-xs font-semibold text-slate-400">Statut actuel du compte :</p>
                   <p className="text-md font-black text-white mt-0.5">
-                    {user.statut_abonnement === 'demo' 
-                      ? "Licence d'essai gratuite (Exportations verrouillées)" 
+                    {user.statut_abonnement === 'demo'
+                      ? "Licence d'essai gratuite (Exportations verrouillées)"
                       : `Abonnement Premium Actif — ${user.plan} (expire le ${user.expireLe})`}
                   </p>
                 </div>
@@ -1853,7 +1973,7 @@ const API_URL = 'https://mastanote-backend.onrender.com/api/scan'; {
             <div className="bg-slate-950 border border-slate-800 rounded-2xl p-5 space-y-3">
               <h4 className="font-bold text-rose-400 text-sm">Zone de danger</h4>
               <p className="text-xs text-slate-400">En réinitialisant l'application, toutes vos classes enregistrées et les notes associées seront effacées de l'espace de stockage.</p>
-              
+
               <button
                 onClick={() => {
                   if (confirm("Voulez-vous vraiment réinitialiser l'application ? Cette action est irréversible.")) {
