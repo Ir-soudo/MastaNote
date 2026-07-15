@@ -31,8 +31,8 @@ import {
 } from 'lucide-react';
 
 // --- IMPORTATION DU SYSTEME DE LICENCES CHARIOW ---
-import { LicenceService } from './services/licenceService';
-import { Paywall } from './components/Paywall';
+import { LicenceService } from "./services/LicenceService"; // "L" Majuscule !
+import { Paywall } from "./components/Paywall";
 
 // Liste des matières standardisées pour le Primaire d'EducMaster Bénin
 const MATIERES_PRIMAIRE = [
