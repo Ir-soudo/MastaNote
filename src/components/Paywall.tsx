@@ -70,11 +70,18 @@ export const Paywall: React.FC<PaywallProps> = ({ onActivate }) => {
       <div className="max-w-7xl mx-auto w-full">
         
         {/* En-tête / Branding */}
-        <div className="text-center mb-12">
-          <span className="px-3 py-1 bg-amber-500/10 text-amber-400 text-xs font-semibold rounded-full border border-amber-500/20">
-            MastaNote AI+
-          </span>
-          <h1 className="mt-4 text-4xl font-extrabold sm:text-5xl tracking-tight">
+<div className="text-center mb-12 flex flex-col items-center">
+  {/* Logo MastaNote importé depuis votre catalogue public/icons.svg */}
+  <div className="bg-purple-500/10 p-3 rounded-2xl border border-purple-500/20 mb-4 shadow-lg shadow-purple-500/5">
+    <svg className="w-12 height-12 text-purple-500 animate-pulse" aria-hidden="true" style={{ width: '48px', height: '46px' }}>
+      <use href="/icons.svg#mastanote-icon" />
+    </svg>
+  </div>
+  
+  <span className="px-3 py-1 bg-amber-500/10 text-amber-400 text-xs font-semibold rounded-full border border-amber-500/20">
+    MastaNote AI+
+  </span>
+  <h1 className="mt-4 text-4xl font-extrabold sm:text-5xl tracking-tight">
             Activez votre accès professionnel
           </h1>
           <p className="mt-4 text-lg text-slate-400 max-w-2xl mx-auto">
