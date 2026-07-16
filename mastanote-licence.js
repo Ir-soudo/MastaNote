@@ -7,7 +7,12 @@
 const CHARIOW_CONFIG = {
     // Remplacer par votre clé API secrète (sk_...) de Chariow
     API_KEY: "sk_dfuwgamt_43dbdad90595be06d27aafcc2746274a", 
-    API_URL: "https://api.chariow.com/v1/licenses/validate",
+    
+    // CORRECTION : L'URL est désormais dynamique pour éviter l'erreur ERR_NAME_NOT_RESOLVED de api.chariow.com.
+    // Si l'application tourne sur localhost, elle appelle le serveur local, sinon elle appelle votre propre serveur Render.
+    API_URL: (typeof window !== 'undefined' && window.location.hostname === 'localhost')
+        ? "http://localhost:5000/v1/licenses/validate"
+        : "https://mastanote-ai.onrender.com/v1/licenses/validate",
     
     // Vos IDs de produits récupérés
     PRODUCTS: {
@@ -76,7 +81,7 @@ const LicenceManager = {
         return licence.productId === CHARIOW_CONFIG.PRODUCTS.FIVE_YEARS;
     },
 
-    // APPEL API CHARIOW POUR VALIDER UNE CLÉ
+    // APPEL API POUR VALIDER UNE CLÉ
     async validateKeyWithChariow(inputKey) {
         try {
             const response = await fetch(CHARIOW_CONFIG.API_URL, {
@@ -100,7 +105,7 @@ const LicenceManager = {
                 return { success: false, message: data.message || "Clé invalide ou expirée." };
             }
         } catch (error) {
-            console.error("Erreur de validation Chariow:", error);
+            console.error("Erreur de validation:", error);
             return { success: false, message: "Erreur réseau. Veuillez vérifier votre connexion internet." };
         }
     }
