@@ -1,0 +1,11 @@
+services:
+  - type: web
+    name: mastanote
+    env: static
+    buildCommand: npm run build
+    publishDir: dist # Ou 'build' selon votre configuration Vite/CRA
+    routes:
+      # Règle de réécriture : renvoie toutes les requêtes vers index.html
+      - type: rewrite
+        source: /*
+        destination: /index.html
