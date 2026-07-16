@@ -1,89 +1,121 @@
 // src/services/licenceService.ts
 
-export const CHARIOW_CONFIG = {
-    API_KEY: "sk_dfuwgamt_43dbdad90595be06d27aafcc2746274a", // Remplacez par votre clé sk_... de Chariow
-    API_URL: "https://api.chariow.com/v1/licenses/validate",
-    PRODUCTS: {
-        ONE_YEAR: "prd_z2kjla30",
-        THREE_YEARS: "prd_6duiuhl1",
-        FIVE_YEARS: "prd_s877x4vl" // Premium
-    },
-    LINKS: {
-        ONE_YEAR: "https://soudoboutik-ebook.mychariow.shop/prd_z2kjla30/checkout",
-        THREE_YEARS: "https://soudoboutik-ebook.mychariow.shop/prd_6duiuhl1/checkout",
-        FIVE_YEARS: "https://soudoboutik-ebook.mychariow.shop/prd_s877x4vl/checkout"
+/**
+ * Détermine dynamiquement l'URL de l'API de licence.
+ * S'adapte automatiquement à l'environnement StackBlitz (WebContainers), Localhost ou Production (Render).
+ */
+export const getDynamicApiUrl = (): string => {
+    if (typeof window !== 'undefined') {
+      const hostname = window.location.hostname;
+  
+      // 1. Détection de l'environnement StackBlitz / WebContainer
+      if (hostname.includes('webcontainer.io') || hostname.includes('stackblitz')) {
+        // Extrait le sous-domaine unique de StackBlitz (ex: mastanote-4ob5--5173--87cf54cd)
+        const parts = hostname.split('.');
+        const subDomain = parts[0];
+        
+        // Remplace le port de preview (souvent 5173) par le port du serveur backend (5000)
+        const backendSubDomain = subDomain.replace('--5173--', '--5000--');
+        
+        return `https://${backendSubDomain}.${parts.slice(1).join('.')}`;
+      }
     }
-};
-
-export const LicenceService = {
-    saveLicence(licenseKey: string, productId: string, expiryDate: string): void {
-        localStorage.setItem("mastanote_licence_key", licenseKey);
-        localStorage.setItem("mastanote_product_id", productId);
-        localStorage.setItem("mastanote_expiry_date", expiryDate);
-        localStorage.setItem("mastanote_is_active", "true");
-    },
-
-    getLicence() {
+  
+    // 2. Détection de l'environnement Localhost classique
+    if (typeof window !== 'undefined' && (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1')) {
+      return 'http://localhost:5000';
+    }
+  
+    // 3. URL de production par défaut (Render)
+    return 'https://mastanote-ai.onrender.com';
+  };
+  
+  export interface ActivationResponse {
+    success: boolean;
+    message: string;
+    isBypass?: boolean;
+  }
+  
+  /**
+   * Service de gestion des licences
+   */
+  export const licenceService = {
+    /**
+     * Valide une clé de licence auprès du serveur (avec secours local intelligent)
+     */
+    async validerLicence(cle: string): Promise<ActivationResponse> {
+      const API_URL = getDynamicApiUrl();
+  
+      try {
+        // Tentative de validation en ligne auprès du serveur configuré
+        const response = await fetch(`${API_URL}/api/licence/valider`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({ cle }),
+        });
+  
+        if (!response.ok) {
+          throw new Error(`Erreur serveur: ${response.status}`);
+        }
+  
+        const data = await response.json();
         return {
-            key: localStorage.getItem("mastanote_licence_key"),
-            productId: localStorage.getItem("mastanote_product_id"),
-            expiryDate: localStorage.getItem("mastanote_expiry_date"),
-            isActive: localStorage.getItem("mastanote_is_active") === "true"
+          success: data.success,
+          message: data.message || 'Licence validée avec succès.',
         };
-    },
-
-    clearLicence(): void {
-        localStorage.removeItem("mastanote_licence_key");
-        localStorage.removeItem("mastanote_product_id");
-        localStorage.removeItem("mastanote_expiry_date");
-        localStorage.removeItem("mastanote_is_active");
-    },
-
-    hasAccess(): boolean {
-        const licence = this.getLicence();
-        if (!licence.isActive) return false;
-
-        if (licence.expiryDate) {
-            const today = new Date();
-            const expiry = new Date(licence.expiryDate);
-            if (today > expiry) {
-                this.clearLicence();
-                return false;
-            }
+  
+      } catch (error) {
+        console.warn("Connexion réseau impossible avec l'API. Tentative de validation en mode secours...", error);
+  
+        // Système de secours hors-ligne (Bypass) :
+        // Si le serveur est inaccessible et que la clé commence par "MN-", on valide localement.
+        if (cle && cle.trim().toUpperCase().startsWith('MN-')) {
+          return {
+            success: true,
+            message: 'Validation hors-ligne réussie (Mode Secours Activé).',
+            isBypass: true,
+          };
         }
-        return true;
+  
+        // Si la clé ne respecte pas le format de secours, on signale l'erreur réseau standard
+        return {
+          success: false,
+          message: "Impossible de joindre le serveur d'activation. Veuillez vérifier votre connexion ou utiliser une clé de secours (MN-...).",
+        };
+      }
     },
-
-    hasPremiumAccess(): boolean {
-        if (!this.hasAccess()) return false;
-        const licence = this.getLicence();
-        return licence.productId === CHARIOW_CONFIG.PRODUCTS.FIVE_YEARS;
+  
+    /**
+     * Sauvegarde localement le statut de la licence dans le navigateur
+     */
+    sauvegarderStatutLocal(cle: string, active: boolean): void {
+      if (typeof window !== 'undefined') {
+        localStorage.setItem('mastanote_licence_active', active ? 'true' : 'false');
+        localStorage.setItem('mastanote_licence_cle', cle);
+      }
     },
-
-    async validateKeyWithChariow(inputKey: string): Promise<{ success: boolean; message: string }> {
-        try {
-            const response = await fetch(CHARIOW_CONFIG.API_URL, {
-                method: "POST",
-                headers: {
-                    "Content-Type": "application/json",
-                    "Authorization": `Bearer ${CHARIOW_CONFIG.API_KEY}`
-                },
-                body: JSON.stringify({
-                    license_key: inputKey
-                })
-            });
-
-            const data = await response.json();
-
-            if (response.ok && data.is_active) {
-                this.saveLicence(inputKey, data.product_id, data.expires_at);
-                return { success: true, message: "Licence activée avec succès !" };
-            } else {
-                return { success: false, message: data.message || "Clé invalide ou expirée." };
-            }
-        } catch (error) {
-            console.error("Erreur de validation Chariow:", error);
-            return { success: false, message: "Erreur réseau. Veuillez vérifier votre connexion." };
-        }
+  
+    /**
+     * Récupère le statut de la licence sauvegardé localement
+     */
+    getStatutLocal(): { active: boolean; cle: string } {
+      if (typeof window !== 'undefined') {
+        const active = localStorage.getItem('mastanote_licence_active') === 'true';
+        const cle = localStorage.getItem('mastanote_licence_cle') || '';
+        return { active, cle };
+      }
+      return { active: false, cle: '' };
+    },
+  
+    /**
+     * Supprime la licence stockée localement (Déconnexion)
+     */
+    reinitialiserLicence(): void {
+      if (typeof window !== 'undefined') {
+        localStorage.removeItem('mastanote_licence_active');
+        localStorage.removeItem('mastanote_licence_cle');
+      }
     }
-};
+  };

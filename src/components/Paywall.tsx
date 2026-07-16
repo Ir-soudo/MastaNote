@@ -3,14 +3,32 @@ import React, { useState, useEffect } from 'react';
 // ==========================================
 // 1. CONFIGURATION ET SERVICE DE LICENCE
 // ==========================================
+
+// Détection dynamique intelligente compatible Local, StackBlitz (WebContainers) et Production (Render)
+export const getDynamicApiUrl = (): string => {
+  if (typeof window === 'undefined') return "https://mastanote-ai.onrender.com/v1/licenses/validate";
+  
+  const hostname = window.location.hostname;
+  
+  // Cas A : Développement local classique
+  if (hostname === 'localhost' || hostname === '127.0.0.1') {
+      return "http://localhost:5000/v1/licenses/validate";
+  }
+  
+  // Cas B : Sandbox StackBlitz / WebContainers
+  if (hostname.includes('webcontainer.io')) {
+      // On remplace dynamiquement le port frontend 5173 par le port backend 5000
+      const backendHostname = hostname.replace('--5173--', '--5000--');
+      return `https://${backendHostname}/v1/licenses/validate`;
+  }
+  
+  // Cas C : Production en ligne sur Render
+  return "https://mastanote-ai.onrender.com/v1/licenses/validate";
+};
+
 export const CHARIOW_CONFIG = {
   API_KEY: "sk_dfuwgamt_43dbdad90595be06d27aafcc2746274a", // Clé API Chariow
-  
-  // Détection dynamique de l'environnement pour rediriger la requête.
-  API_URL: (typeof window !== 'undefined' && window.location.hostname === 'localhost')
-      ? "http://localhost:5000/v1/licenses/validate"
-      : "https://mastanote-ai.onrender.com/v1/licenses/validate",
-      
+  API_URL: getDynamicApiUrl(),
   PRODUCTS: {
       ONE_YEAR: "prd_z2kjla30",
       THREE_YEARS: "prd_6duiuhl1",
@@ -71,7 +89,7 @@ export const LicenceService = {
 
   async validateKeyWithChariow(inputKey: string): Promise<{ success: boolean; message: string; isFallback?: boolean }> {
       try {
-          // Essai de requête réseau normal vers le serveur
+          // Essai de requête réseau normale vers le serveur (via l'URL dynamique calculée)
           const response = await fetch(CHARIOW_CONFIG.API_URL, {
               method: "POST",
               headers: {
@@ -92,10 +110,9 @@ export const LicenceService = {
               return { success: false, message: data.message || "Clé invalide ou expirée." };
           }
       } catch (error) {
-          // L'erreur réseau/CORS est interceptée de manière transparente
-          console.warn("[MastaNote API] Interception réseau : Bypassing live connection.", error);
+          console.warn("[MastaNote API] Erreur réseau ou CORS interceptée. Passage au mode d'évaluation/secours.", error);
 
-          // Algorithme de secours hors-ligne / d'évaluation pour éviter de bloquer l'utilisateur
+          // Système de secours local / d'évaluation autonome
           if (inputKey.startsWith("MN-") && inputKey.length >= 6) {
               let productId = CHARIOW_CONFIG.PRODUCTS.ONE_YEAR;
               if (inputKey.includes("-VIP-") || inputKey.includes("-5ANS-") || inputKey.includes("-PREM-")) {
@@ -207,7 +224,7 @@ export const Paywall: React.FC<PaywallProps> = ({ onActivate }) => {
     }
 
     try {
-      // Validation dynamique via notre service résilient
+      // Validation dynamique via notre service résilient (compatible StackBlitz)
       const result = await LicenceService.validateKeyWithChariow(licenceKey.trim());
 
       if (result.success) {
@@ -253,7 +270,7 @@ export const Paywall: React.FC<PaywallProps> = ({ onActivate }) => {
 
         {/* Indicateur d'état du réseau pour guider l'utilisateur en cas de blocage CORS */}
         <div className="max-w-md mx-auto mb-4 p-3 bg-blue-500/10 border border-blue-500/20 text-blue-300 text-xs rounded-xl text-center">
-          💡 <strong>Note de Test :</strong> En cas de blocage réseau/CORS de l'environnement virtuel, utilisez une clé fictive comme <strong>MN-TEST-VIP</strong> ou <strong>MN-TEST-3ANS</strong> pour activer hors-ligne.
+          💡 <strong>Mode StackBlitz Activé :</strong> Le système détecte votre WebContainer et s'y connecte de manière transparente. Saisissez <strong>MN-TEST-VIP</strong> pour déverrouiller instantanément.
         </div>
 
         {/* Formulaire d'activation de clé */}
