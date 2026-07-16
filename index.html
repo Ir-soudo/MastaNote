@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="fr" class="dark bg-slate-900 text-white">
+<html lang="fr" class="dark bg-[#0a0e1a] text-slate-100">
   <head>
     <meta charset="UTF-8" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
@@ -8,13 +8,75 @@
     <script src="https://cdn.tailwindcss.com"></script>
     <meta name="description" content="Assistant de gestion des notes pour enseignants du Primaire au Bénin, compatible EducMaster." />
     <link rel="manifest" href="/manifest.json" />
-    <meta name="theme-color" content="#0f172a" />
+    <meta name="theme-color" content="#0a0e1a" />
     <link rel="apple-touch-icon" href="/icon-192x192.png" />
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
     <meta name="apple-mobile-web-app-title" content="MastaNote" />
+
+    <style>
+      /* 
+       * Surcharge globale pour forcer le design fidèle à "MastaNote landing.png"
+       * même si des classes de thème clair (bg-white, etc.) sont écrites en dur.
+       */
+      html, body {
+        background-color: #0a0e1a !important;
+        color: #f1f5f9 !important;
+        font-family: 'Inter', sans-serif;
+      }
+
+      /* Conversion des éléments blancs/clairs en conteneurs sombres */
+      .bg-white, .bg-slate-50, .bg-gray-50, .bg-slate-100 {
+        background-color: #0d1321 !important;
+        color: #f1f5f9 !important;
+      }
+
+      /* Cartes principales de statistiques et de classes */
+      .bg-gradient-to-r, .bg-gradient-to-br, .card-active {
+        background: linear-gradient(135deg, #131b31 0%, #0c1122 100%) !important;
+        border: 1px solid rgba(59, 130, 246, 0.15) !important;
+      }
+
+      /* Forçage des textes clairs/foncés */
+      .text-gray-900, .text-slate-900, .text-slate-800, .text-gray-800 {
+        color: #f8fafc !important;
+      }
+      .text-gray-500, .text-slate-400, .text-gray-400 {
+        color: #94a3b8 !important;
+      }
+
+      /* Bordures sombres d'origine */
+      .border, .border-gray-200, .border-slate-200, .border-gray-300 {
+        border-color: rgba(30, 41, 59, 0.7) !important;
+      }
+
+      /* Bouton d'exportation Émeraude */
+      .btn-export, [class*="bg-emerald-"], [class*="bg-green-"] {
+        background-color: #10b981 !important;
+        color: #042c18 !important;
+        font-weight: 700 !important;
+      }
+
+      /* Bouton Orange de déblocage */
+      .btn-unlock, [class*="bg-amber-"], [class*="bg-orange-"] {
+        background-color: #f97316 !important;
+        color: #0f172a !important;
+        font-weight: 700 !important;
+      }
+
+      /* Badge de classe active et filtres de matières */
+      .badge-filter {
+        background-color: #0f172a !important;
+        border: 1px solid #1e293b !important;
+      }
+      .badge-filter-active {
+        background-color: rgba(59, 130, 246, 0.1) !important;
+        border: 1.5px solid #3b82f6 !important;
+        color: #3b82f6 !important;
+      }
+    </style>
   </head>
-  <body class="bg-slate-900 text-white antialiased">
+  <body class="bg-[#0a0e1a] text-slate-100 antialiased">
     <div id="root"></div>
     <script type="module" src="/src/main.tsx"></script>
   </body>
