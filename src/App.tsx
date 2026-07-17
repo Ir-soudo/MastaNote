@@ -229,7 +229,7 @@ export default function App() {
     });
 
     if (studentGrades.length === 0) {
-      setAiContent("Cet élève n'a pas de notes saisies.");
+      setAiContent("Cet élève n'a de notes saisies.");
       setAiLoading(false);
       return;
     }
@@ -613,7 +613,7 @@ export default function App() {
       <div className="absolute bottom-1/4 right-10 w-[500px] h-[500px] bg-gradient-to-bl from-purple-500/10 to-transparent rounded-full blur-[130px] pointer-events-none z-0" />
       <div className="absolute top-1/3 right-1/4 w-[350px] h-[350px] bg-indigo-500/5 rounded-full blur-[110px] pointer-events-none z-0" />
 
-      {}
+      {/* System alert notifications banner */}
       {notif && (
         <div className={`fixed top-6 left-1/2 transform -translate-x-1/2 z-50 px-6 py-3.5 rounded-2xl shadow-[0_12px_40px_rgba(0,0,0,0.65)] flex items-center gap-3 border backdrop-blur-xl transition-all duration-300 animate-in fade-in slide-in-from-top-6 ${
           notif.type === 'success' ? 'bg-[#0b1b14]/90 border-emerald-500/30 text-emerald-300' : 'bg-[#1b0a0d]/90 border-rose-500/30 text-rose-300'
@@ -704,7 +704,7 @@ export default function App() {
       {/* --- MAIN PAGE TAB LAYOUTS --- */}
       <main className="flex-1 max-w-6xl w-full mx-auto p-4 flex flex-col gap-6 relative z-10">
 
-        {}
+        {/* Modal: Add Class */}
         {showAddClassModal && (
           <div className="fixed inset-0 bg-[#04060b]/90 backdrop-blur-md flex items-center justify-center p-4 z-50">
             <div className="bg-[#0c101d] border border-slate-800 rounded-3xl p-6 w-full max-w-md shadow-2xl animate-in zoom-in-95 duration-200">
@@ -760,7 +760,7 @@ export default function App() {
           </div>
         )}
 
-        {}
+        {/* Modal: Gemini AI Console */}
         {aiModalOpen && (
           <div className="fixed inset-0 bg-[#04060b]/90 backdrop-blur-md flex items-center justify-center p-4 z-50">
             <div className="bg-[#0c101d] border border-indigo-500/20 rounded-3xl p-6 w-full max-w-2xl shadow-3xl flex flex-col max-h-[85vh] animate-in zoom-in-95 duration-200">
@@ -818,7 +818,7 @@ export default function App() {
           </div>
         )}
 
-        {}
+        {/* Modal: App reset verification */}
         {showResetConfirm && (
           <div className="fixed inset-0 bg-[#04060b]/90 backdrop-blur-sm flex items-center justify-center p-4 z-50">
             <div className="bg-[#0c101d] border border-rose-500/30 rounded-3xl p-6 w-full max-w-md shadow-2xl animate-in zoom-in-95 duration-200">
@@ -1076,7 +1076,6 @@ export default function App() {
               </div>
             </div>
 
-            {}
             {/* STATS OVERVIEW DECORATED CARDS */}
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
               <div className="bg-[#0c101d] border border-slate-800/60 p-5 rounded-2xl flex items-center gap-4 shadow-md hover:border-slate-700/60 transition-all">
@@ -1121,7 +1120,6 @@ export default function App() {
             </div>
 
             {/* --- STREAMING_CHUNK:Rendering primary grades ledger table... --- */}
-            {/* CLASS GRAD RATING GRIDS */}
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
               
               <div className="bg-[#0c101d]/80 border border-slate-800/60 rounded-2xl p-5 lg:col-span-2 space-y-4 shadow-lg">
@@ -1202,7 +1200,6 @@ export default function App() {
               </div>
 
               {/* --- STREAMING_CHUNK:Rendering analytical diagnostic sidebar... --- */}
-              {/* CARD ANALYTIC SIDEBAR */}
               <div className="bg-[#0c101d]/80 border border-slate-800/60 rounded-2xl p-5 space-y-4 flex flex-col justify-between shadow-lg">
                 <div className="space-y-2">
                   <h4 className="font-extrabold text-sm text-white flex items-center gap-2">
@@ -1237,7 +1234,6 @@ export default function App() {
         )}
 
         {/* --- STREAMING_CHUNK:Rendering mobile-first vocal dictation terminal... --- */}
-        {/* --- MOBILE-FIRST DICTEE VOCALE & SAISIE INTERFACE --- */}
         {activeTab === 'saisie' && activeClass?.eleves.length > 0 && (
           <div className="max-w-xl mx-auto w-full space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-300">
             
@@ -1255,7 +1251,7 @@ export default function App() {
               </span>
             </div>
 
-            {/* SELECTION RAPIDE MATIÈRE SAISIE */}
+            {/* QUICK SUBJECT SELECTOR FOR DICTATION */}
             <div className="bg-[#0c101d] border border-slate-800/60 p-3 rounded-2xl">
               <label className="block text-[9px] font-black text-slate-500 uppercase tracking-wider mb-1.5 px-1">Matière de saisie</label>
               <select
@@ -1272,7 +1268,7 @@ export default function App() {
               </select>
             </div>
 
-            {/* BOX DE SAISIE CENTRAL */}
+            {/* CENTRAL INPUT BOX */}
             <div className="bg-gradient-to-tr from-[#0c101d] to-[#05060b] border border-slate-800/80 rounded-3xl p-6 shadow-2xl relative overflow-hidden">
               <div className="absolute top-0 right-0 -mr-6 -mt-6 w-32 h-32 bg-indigo-500/5 rounded-full blur-2xl" />
 
@@ -1288,7 +1284,7 @@ export default function App() {
                 </p>
               </div>
 
-              {/* MODULE VOCAL INTELLIGENT */}
+              {/* VOICE MODULE CONTROLS */}
               <div className="bg-[#04060b] border border-slate-800/80 rounded-2xl p-5 mb-6 space-y-4 text-center relative overflow-hidden">
                 <div className="flex items-center justify-between">
                   <span className="text-[9px] font-bold text-slate-500 uppercase tracking-widest">Saisie Vocale intelligente</span>
@@ -1344,7 +1340,7 @@ export default function App() {
                 </div>
               </div>
 
-              {/* NAVIGATION INTER-ÉLÈVES */}
+              {/* NAVIGATION BUTTONS */}
               <div className="flex items-center justify-between gap-3 mt-6 pt-2">
                 <button
                   onClick={handlePrev}
@@ -1373,7 +1369,6 @@ export default function App() {
         )}
 
         {/* --- STREAMING_CHUNK:Rendering student roster and registration forms... --- */}
-        {/* --- STUDENTS MANAGEMENT ROSTERS --- */}
         {activeTab === 'eleves' && (
           <div className="grid grid-cols-1 md:grid-cols-3 gap-6 animate-in fade-in duration-300">
             
@@ -1480,7 +1475,6 @@ export default function App() {
         )}
 
         {/* --- STREAMING_CHUNK:Rendering administrative application settings... --- */}
-        {/* --- SYSTEM SETTINGS TAB --- */}
         {activeTab === 'parametres' && (
           <div className="max-w-2xl mx-auto w-full space-y-6 animate-in fade-in duration-300">
             <h3 className="font-extrabold text-lg text-white">Paramètres d'administration</h3>
@@ -1557,7 +1551,6 @@ export default function App() {
       </main>
 
       {/* --- STREAMING_CHUNK:Rendering footer information and credentials... --- */}
-      {/* FOOTER */}
       <footer className="bg-[#04060b] border-t border-slate-800/80 px-4 py-5 text-center text-xs text-slate-500 relative z-10">
         <div className="max-w-6xl mx-auto flex flex-col sm:flex-row items-center justify-between gap-3">
           <p>© 2026 MastaNote AI+ - Spécial Primaire Bénin (CI à CM2). Tous droits réservés.</p>
