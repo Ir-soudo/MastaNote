@@ -1,83 +1,90 @@
 <!DOCTYPE html>
-<html lang="fr" class="dark bg-[#0a0e1a] text-slate-100">
+<html lang="fr" class="dark">
   <head>
     <meta charset="UTF-8" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>MastaNote AI+</title>
-    <script src="https://cdn.tailwindcss.com"></script>
+    
+    <!-- Description SEO et Manifeste PWA -->
     <meta name="description" content="Assistant de gestion des notes pour enseignants du Primaire au Bénin, compatible EducMaster." />
     <link rel="manifest" href="/manifest.json" />
     <meta name="theme-color" content="#0a0e1a" />
+    
+    <!-- Support Mobile / Apple -->
     <link rel="apple-touch-icon" href="/icon-192x192.png" />
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
     <meta name="apple-mobile-web-app-title" content="MastaNote" />
 
+    <!-- Importation propre de la police Inter -->
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet" />
+
+    <!-- Script de secours Tailwind CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+
+    <script>
+      // Permet à Tailwind CDN de compiler proprement les classes sombres (dark:)
+      tailwind.config = {
+        darkMode: 'class',
+        theme: {
+          extend: {
+            colors: {
+              // Teintes fidèles au design original de MastaNote
+              brand: {
+                deep: '#0a0e1a',   // Fond principal bleu nuit
+                card: '#131b31',   // Fond des cartes sombres
+                header: '#0d1321'  // En-tête et navigation
+              }
+            }
+          }
+        }
+      }
+    </script>
+
     <style>
       /* 
-       * Surcharge globale pour forcer le design fidèle à "MastaNote landing.png"
-       * même si des classes de thème clair (bg-white, etc.) sont écrites en dur.
+       * Styles de base légers, propres et non-destructifs. 
+       * Empêche uniquement le flash blanc au chargement et force le mode sombre natif.
        */
-      html, body {
-        background-color: #0a0e1a !important;
-        color: #f1f5f9 !important;
+      html {
+        background-color: #0a0e1a; /* Fond bleu nuit original de MastaNote */
+        color-scheme: dark; /* Force les barres de défilement du navigateur en mode sombre */
+        scroll-behavior: smooth;
+      }
+      
+      body {
         font-family: 'Inter', sans-serif;
+        background-color: #0a0e1a;
+        color: #f1f5f9;
+        margin: 0;
+        padding: 0;
       }
 
-      /* Conversion des éléments blancs/clairs en conteneurs sombres */
-      .bg-white, .bg-slate-50, .bg-gray-50, .bg-slate-100 {
-        background-color: #0d1321 !important;
-        color: #f1f5f9 !important;
+      /* Style élégant et discret pour la barre de défilement */
+      ::-webkit-scrollbar {
+        width: 8px;
+        height: 8px;
       }
-
-      /* Cartes principales de statistiques et de classes */
-      .bg-gradient-to-r, .bg-gradient-to-br, .card-active {
-        background: linear-gradient(135deg, #131b31 0%, #0c1122 100%) !important;
-        border: 1px solid rgba(59, 130, 246, 0.15) !important;
+      ::-webkit-scrollbar-track {
+        background: #0a0e1a;
       }
-
-      /* Forçage des textes clairs/foncés */
-      .text-gray-900, .text-slate-900, .text-slate-800, .text-gray-800 {
-        color: #f8fafc !important;
+      ::-webkit-scrollbar-thumb {
+        background: #1e293b;
+        border-radius: 9999px;
       }
-      .text-gray-500, .text-slate-400, .text-gray-400 {
-        color: #94a3b8 !important;
-      }
-
-      /* Bordures sombres d'origine */
-      .border, .border-gray-200, .border-slate-200, .border-gray-300 {
-        border-color: rgba(30, 41, 59, 0.7) !important;
-      }
-
-      /* Bouton d'exportation Émeraude */
-      .btn-export, [class*="bg-emerald-"], [class*="bg-green-"] {
-        background-color: #10b981 !important;
-        color: #042c18 !important;
-        font-weight: 700 !important;
-      }
-
-      /* Bouton Orange de déblocage */
-      .btn-unlock, [class*="bg-amber-"], [class*="bg-orange-"] {
-        background-color: #f97316 !important;
-        color: #0f172a !important;
-        font-weight: 700 !important;
-      }
-
-      /* Badge de classe active et filtres de matières */
-      .badge-filter {
-        background-color: #0f172a !important;
-        border: 1px solid #1e293b !important;
-      }
-      .badge-filter-active {
-        background-color: rgba(59, 130, 246, 0.1) !important;
-        border: 1.5px solid #3b82f6 !important;
-        color: #3b82f6 !important;
+      ::-webkit-scrollbar-thumb:hover {
+        background: #334155;
       }
     </style>
   </head>
-  <body class="bg-[#0a0e1a] text-slate-100 antialiased">
+  <body class="antialiased">
+    <!-- Point d'entrée de votre application React / Vite -->
     <div id="root"></div>
+    
+    <!-- Script principal de l'application -->
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>
