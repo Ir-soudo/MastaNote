@@ -301,6 +301,38 @@ export default function App() {
     }
   };
 
+  useEffect(() => {
+    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+    if (SpeechRecognition) {
+      const rec = new SpeechRecognition();
+      rec.continuous = false;
+      rec.lang = 'fr-FR';
+      rec.interimResults = false;
+      rec.maxAlternatives = 1;
+
+      rec.onstart = () => {
+        setIsListening(true);
+        setVoiceStatus("Écoute active... Dites par exemple : '14 et 12'");
+      };
+
+      rec.onresult = (event) => {
+        const text = event.results[0][0].transcript;
+        processVoiceCommand(text);
+      };
+
+      rec.onerror = () => {
+        setVoiceStatus("Une erreur est survenue lors de la saisie vocale.");
+        setIsListening(false);
+      };
+
+      rec.onend = () => {
+        setIsListening(false);
+      };
+
+      recognitionRef.current = rec;
+    }
+  }, [selectedClassId, activeMatiere, currentSaisieIndex]);
+
   const processVoiceCommand = (text) => {
     setVoiceStatus(`Texte analysé : "${text}"`);
     const cleanText = text.toLowerCase().trim();
@@ -574,39 +606,42 @@ export default function App() {
   };
 
   return (
-    <div className="min-h-screen bg-[#080B10] text-[#E2E8F0] flex flex-col font-sans selection:bg-indigo-500 selection:text-white">
+    <div className="min-h-screen bg-[#07090e] text-[#E2E8F0] flex flex-col font-sans selection:bg-indigo-500 selection:text-white antialiased">
       
-      {/* GLOW EFFECT IN BACKGROUND */}
-      <div className="absolute top-0 left-1/4 w-[500px] h-[500px] bg-indigo-900/10 rounded-full blur-[120px] pointer-events-none z-0" />
-      <div className="absolute bottom-10 right-10 w-[400px] h-[400px] bg-purple-950/10 rounded-full blur-[100px] pointer-events-none z-0" />
+      {/* GLOWING AMBIENT BACKGROUNDS */}
+      <div className="absolute top-0 left-1/4 w-[600px] h-[600px] bg-gradient-to-tr from-indigo-600/10 to-transparent rounded-full blur-[140px] pointer-events-none z-0" />
+      <div className="absolute bottom-1/4 right-10 w-[500px] h-[500px] bg-gradient-to-bl from-purple-500/10 to-transparent rounded-full blur-[130px] pointer-events-none z-0" />
+      <div className="absolute top-1/3 right-1/4 w-[350px] h-[350px] bg-indigo-500/5 rounded-full blur-[110px] pointer-events-none z-0" />
 
-      {/* SYSTEM NOTIFICATION BANNER */}
+      {}
       {notif && (
-        <div className={`fixed top-6 left-1/2 transform -translate-x-1/2 z-50 px-5 py-3 rounded-2xl shadow-[0_10px_30px_rgba(0,0,0,0.5)] flex items-center gap-3 border text-sm transition-all duration-300 animate-in fade-in slide-in-from-top-4 ${
-          notif.type === 'success' ? 'bg-[#0E1B15] border-emerald-500/30 text-emerald-300' : 'bg-[#1C0F12] border-rose-500/30 text-rose-300'
+        <div className={`fixed top-6 left-1/2 transform -translate-x-1/2 z-50 px-6 py-3.5 rounded-2xl shadow-[0_12px_40px_rgba(0,0,0,0.65)] flex items-center gap-3 border backdrop-blur-xl transition-all duration-300 animate-in fade-in slide-in-from-top-6 ${
+          notif.type === 'success' ? 'bg-[#0b1b14]/90 border-emerald-500/30 text-emerald-300' : 'bg-[#1b0a0d]/90 border-rose-500/30 text-rose-300'
         }`}>
-          <CheckCircle className={`w-5 h-5 shrink-0 ${notif.type === 'success' ? 'text-emerald-400' : 'text-rose-400'}`} />
-          <span className="font-medium">{notif.message}</span>
+          <div className={`p-1 rounded-full ${notif.type === 'success' ? 'bg-emerald-500/10 text-emerald-400' : 'bg-rose-500/10 text-rose-400'}`}>
+            <CheckCircle className="w-5 h-5 shrink-0" />
+          </div>
+          <span className="font-semibold text-sm tracking-wide">{notif.message}</span>
         </div>
       )}
 
-      {/* --- PREMIUM APP HEADER --- */}
-      <header className="bg-[#0D121F]/85 border-b border-slate-800/80 backdrop-blur-md sticky top-0 z-40 px-4 py-4 shadow-xl">
+      {/* --- STREAMING_CHUNK:Rendering premium application header... --- */}
+      <header className="bg-[#0b0e17]/80 border-b border-slate-800/60 backdrop-blur-lg sticky top-0 z-40 px-4 sm:px-6 py-4 shadow-xl">
         <div className="max-w-6xl mx-auto flex items-center justify-between">
-          <div className="flex items-center gap-3.5">
-            <div className="bg-gradient-to-tr from-indigo-500 via-purple-600 to-pink-500 p-2.5 rounded-2xl shadow-lg shadow-indigo-500/15">
+          <div className="flex items-center gap-4">
+            <div className="bg-gradient-to-tr from-indigo-500 via-purple-600 to-pink-500 p-2.5 rounded-2xl shadow-lg shadow-indigo-500/20 hover:scale-105 transition-all duration-300">
               <BookOpen className="w-6 h-6 text-white" />
             </div>
             <div>
-              <div className="flex items-center gap-2">
-                <h1 className="font-extrabold text-xl tracking-tight bg-gradient-to-r from-white via-slate-100 to-indigo-200 bg-clip-text text-transparent">
+              <div className="flex flex-col sm:flex-row sm:items-center gap-1.5">
+                <h1 className="font-extrabold text-xl tracking-tight bg-gradient-to-r from-white via-slate-100 to-indigo-300 bg-clip-text text-transparent">
                   MastaNote AI+
                 </h1>
-                <span className="text-[10px] bg-indigo-500/15 text-indigo-300 border border-indigo-500/20 px-2 py-0.5 rounded-full font-bold uppercase tracking-wider">
+                <span className="w-fit text-[9px] bg-indigo-500/15 text-indigo-300 border border-indigo-500/25 px-2 py-0.5 rounded-full font-extrabold uppercase tracking-widest">
                   PRÉ-SCOLAIRE & PRIMAIRE
                 </span>
               </div>
-              <p className="text-[11px] text-slate-400 font-medium tracking-wide">Interface Pédagogique Nationale Bénin</p>
+              <p className="text-[11px] text-slate-400 font-medium tracking-wide mt-0.5">Interface Pédagogique Nationale Bénin</p>
             </div>
           </div>
 
@@ -614,22 +649,22 @@ export default function App() {
             {user.statut_abonnement === 'demo' ? (
               <button 
                 onClick={() => setPaywallModal(true)}
-                className="bg-gradient-to-r from-amber-500 via-orange-500 to-pink-500 text-[#090D16] font-extrabold text-xs px-4 py-2.5 rounded-xl flex items-center gap-1.5 hover:shadow-lg hover:shadow-orange-500/10 transition-all transform active:scale-95"
+                className="bg-gradient-to-r from-amber-500 via-orange-500 to-pink-500 text-slate-950 font-black text-xs px-4 py-2.5 rounded-xl flex items-center gap-1.5 hover:shadow-lg hover:shadow-orange-500/20 hover:scale-[1.03] transition-all duration-300 active:scale-95"
               >
                 <Lock className="w-3.5 h-3.5" />
                 Débloquer l'Export
               </button>
             ) : (
-              <span className="bg-[#0E1A16] border border-emerald-500/30 text-emerald-400 text-xs px-3.5 py-2 rounded-xl flex items-center gap-2 font-semibold">
+              <span className="bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 text-xs px-4 py-2.5 rounded-xl flex items-center gap-2 font-bold shadow-lg shadow-emerald-500/5">
                 <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
-                Abonné Premium
+                Premium Activé
               </span>
             )}
             
             <button 
               onClick={() => setActiveTab('parametres')}
-              className={`p-2.5 rounded-xl border transition-all ${activeTab === 'parametres' ? 'bg-slate-800 border-slate-700 text-white' : 'border-slate-800/80 hover:bg-slate-900/60 text-slate-400'}`}
-              title="Paramètres de l'application"
+              className={`p-2.5 rounded-xl border transition-all duration-300 ${activeTab === 'parametres' ? 'bg-slate-800/80 border-slate-700 text-white' : 'border-slate-800/60 bg-slate-900/40 hover:bg-slate-800/50 hover:text-slate-200 text-slate-400'}`}
+              title="Paramètres"
             >
               <Settings className="w-5 h-5" />
             </button>
@@ -637,18 +672,18 @@ export default function App() {
         </div>
       </header>
 
-      {/* --- CLASS AND LEVEL NAVIGATION BAR --- */}
-      <section className="bg-[#0A0E17]/60 border-b border-slate-800/40 px-4 py-3 backdrop-blur-md relative z-10">
+      {/* --- STREAMING_CHUNK:Rendering level selector and class manager... --- */}
+      <section className="bg-[#080b12]/50 border-b border-slate-800/40 px-4 py-3 backdrop-blur-md relative z-10">
         <div className="max-w-6xl mx-auto flex items-center justify-between gap-4">
           <div className="flex items-center gap-3 w-full max-w-xs">
-            <Layers className="w-4 h-4 text-indigo-400 shrink-0" />
+            <Layers className="w-4.5 h-4.5 text-indigo-400 shrink-0" />
             <select
               value={selectedClassId}
               onChange={(e) => {
                 setSelectedClassId(e.target.value);
                 setCurrentSaisieIndex(0);
               }}
-              className="bg-[#121826] border border-slate-800/80 text-slate-200 text-xs rounded-xl px-3 py-2 focus:outline-none focus:ring-2 focus:ring-indigo-500/50 w-full font-semibold transition-all cursor-pointer"
+              className="bg-[#0f1423]/90 border border-slate-800/80 text-slate-200 text-xs rounded-xl px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-indigo-500/50 w-full font-bold transition-all cursor-pointer hover:border-slate-700/80"
             >
               {classes.map(c => (
                 <option key={c.id} value={c.id}>{c.nom} ({c.niveau})</option>
@@ -658,7 +693,7 @@ export default function App() {
 
           <button
             onClick={() => setShowAddClassModal(true)}
-            className="bg-[#121826] hover:bg-slate-800/60 border border-slate-800 text-xs text-indigo-300 font-bold px-3.5 py-2 rounded-xl flex items-center gap-1.5 shrink-0 transition-all active:scale-95"
+            className="bg-[#0f1423] hover:bg-slate-800/60 border border-slate-800/80 text-xs text-indigo-300 font-bold px-4 py-2.5 rounded-xl flex items-center gap-1.5 shrink-0 transition-all active:scale-95 hover:border-indigo-500/30"
           >
             <Plus className="w-4 h-4 text-indigo-400" />
             Créer une classe
@@ -669,32 +704,36 @@ export default function App() {
       {/* --- MAIN PAGE TAB LAYOUTS --- */}
       <main className="flex-1 max-w-6xl w-full mx-auto p-4 flex flex-col gap-6 relative z-10">
 
-        {/* CREATE CLASS MODAL POPUP */}
+        {}
         {showAddClassModal && (
-          <div className="fixed inset-0 bg-[#07090F]/90 backdrop-blur-md flex items-center justify-center p-4 z-50">
-            <div className="bg-[#111622] border border-slate-800 rounded-3xl p-6 w-full max-w-md shadow-2xl animate-in zoom-in-95 duration-200">
-              <h3 className="font-extrabold text-lg text-white mb-4 flex items-center gap-2">
-                <Plus className="text-indigo-400" />
-                Ajouter une nouvelle classe
-              </h3>
+          <div className="fixed inset-0 bg-[#04060b]/90 backdrop-blur-md flex items-center justify-center p-4 z-50">
+            <div className="bg-[#0c101d] border border-slate-800 rounded-3xl p-6 w-full max-w-md shadow-2xl animate-in zoom-in-95 duration-200">
+              <div className="flex items-center gap-2 mb-4">
+                <div className="p-2 bg-indigo-500/10 text-indigo-400 rounded-xl">
+                  <Plus className="w-5 h-5" />
+                </div>
+                <h3 className="font-extrabold text-lg text-white">
+                  Ajouter une nouvelle classe
+                </h3>
+              </div>
               <form onSubmit={handleCreateClass} className="space-y-4">
                 <div>
-                  <label className="block text-xs font-bold text-slate-400 mb-1.5">Nom de la classe (ex: CI Etoiles)</label>
+                  <label className="block text-xs font-bold text-slate-400 mb-2">Nom de la classe (ex: CM2 Émeraude)</label>
                   <input
                     type="text"
                     required
                     placeholder="Saisissez un nom unique"
                     value={newClassName}
                     onChange={(e) => setNewClassName(e.target.value)}
-                    className="w-full bg-[#090D15] border border-slate-800 rounded-xl px-4 py-3 text-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500/50 transition-all font-medium"
+                    className="w-full bg-[#04060b] border border-slate-800 rounded-xl px-4 py-3 text-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500/50 transition-all font-medium placeholder-slate-700"
                   />
                 </div>
                 <div>
-                  <label className="block text-xs font-bold text-slate-400 mb-1.5">Niveau EducMaster d'appartenance</label>
+                  <label className="block text-xs font-bold text-slate-400 mb-2">Niveau EducMaster d'appartenance</label>
                   <select
                     value={newClassNiveau}
                     onChange={(e) => setNewClassNiveau(e.target.value)}
-                    className="w-full bg-[#090D15] border border-slate-800 rounded-xl px-4 py-3 text-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500/50 transition-all font-semibold"
+                    className="w-full bg-[#04060b] border border-slate-800 rounded-xl px-4 py-3 text-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500/50 transition-all font-semibold"
                   >
                     {CLASSES_PRIMAIRE.map(lvl => (
                       <option key={lvl} value={lvl}>{lvl}</option>
@@ -721,10 +760,10 @@ export default function App() {
           </div>
         )}
 
-        {/* GEMINI AI OUTPUT VISUALIZER MODAL */}
+        {}
         {aiModalOpen && (
-          <div className="fixed inset-0 bg-[#07090F]/95 backdrop-blur-md flex items-center justify-center p-4 z-50">
-            <div className="bg-[#101420] border border-indigo-500/20 rounded-3xl p-6 w-full max-w-2xl shadow-3xl flex flex-col max-h-[85vh] animate-in zoom-in-95 duration-200">
+          <div className="fixed inset-0 bg-[#04060b]/90 backdrop-blur-md flex items-center justify-center p-4 z-50">
+            <div className="bg-[#0c101d] border border-indigo-500/20 rounded-3xl p-6 w-full max-w-2xl shadow-3xl flex flex-col max-h-[85vh] animate-in zoom-in-95 duration-200">
               <div className="flex items-center justify-between border-b border-slate-800/80 pb-4 mb-4">
                 <h3 className="font-extrabold text-lg text-white flex items-center gap-2">
                   <Bot className="text-indigo-400 w-5 h-5 animate-bounce" />
@@ -751,7 +790,7 @@ export default function App() {
                     </div>
                   </div>
                 ) : (
-                  <div className="whitespace-pre-wrap font-medium bg-[#080B12]/80 border border-slate-800/60 p-5 rounded-2xl shadow-inner text-slate-300">
+                  <div className="whitespace-pre-wrap font-medium bg-[#04060b] border border-slate-800/60 p-5 rounded-2xl shadow-inner text-slate-300">
                     {aiContent}
                   </div>
                 )}
@@ -764,7 +803,7 @@ export default function App() {
                     triggerNotif("Texte copié avec succès !", "success");
                   }}
                   disabled={aiLoading}
-                  className="px-4 py-2.5 text-xs text-slate-300 hover:text-white bg-[#1A2035] hover:bg-[#232B47] disabled:opacity-30 font-bold rounded-xl transition-all active:scale-95"
+                  className="px-4 py-2.5 text-xs text-slate-300 hover:text-white bg-[#151a2e] hover:bg-[#1a213a] disabled:opacity-30 font-bold rounded-xl transition-all active:scale-95"
                 >
                   Copier dans le presse-papier
                 </button>
@@ -779,12 +818,12 @@ export default function App() {
           </div>
         )}
 
-        {/* CUSTOM DESTRUCTION APP REBOOT CONFIRMATION MODAL */}
+        {}
         {showResetConfirm && (
-          <div className="fixed inset-0 bg-[#07090F]/90 backdrop-blur-sm flex items-center justify-center p-4 z-50">
-            <div className="bg-[#111521] border border-rose-500/30 rounded-3xl p-6 w-full max-w-md shadow-2xl animate-in zoom-in-95 duration-200">
+          <div className="fixed inset-0 bg-[#04060b]/90 backdrop-blur-sm flex items-center justify-center p-4 z-50">
+            <div className="bg-[#0c101d] border border-rose-500/30 rounded-3xl p-6 w-full max-w-md shadow-2xl animate-in zoom-in-95 duration-200">
               <div className="flex items-center gap-3 text-rose-400 mb-3">
-                <AlertTriangle className="w-7 h-7" />
+                <AlertTriangle className="w-7 h-7 animate-pulse" />
                 <h3 className="font-extrabold text-lg text-white">Réinitialiser l'application ?</h3>
               </div>
               <p className="text-xs text-slate-400 leading-relaxed mb-6">
@@ -808,10 +847,10 @@ export default function App() {
           </div>
         )}
 
-        {/* --- PREMIUM MOBILE MONEY GATEWAY / PAYWALL MODAL --- */}
+        {/* --- STREAMING_CHUNK:Rendering Mobile Money payment gateway... --- */}
         {paywallModal && (
-          <div className="fixed inset-0 bg-[#06080E]/95 backdrop-blur-md flex items-center justify-center p-4 z-50">
-            <div className="bg-[#101422] border border-slate-800 rounded-3xl p-6 w-full max-w-lg shadow-3xl relative animate-in zoom-in-95 duration-200">
+          <div className="fixed inset-0 bg-[#04060b]/95 backdrop-blur-md flex items-center justify-center p-4 z-50">
+            <div className="bg-[#0c101d] border border-slate-800 rounded-3xl p-6 w-full max-w-lg shadow-3xl relative animate-in zoom-in-95 duration-200">
               <button 
                 onClick={() => setPaywallModal(false)}
                 className="absolute top-4 right-4 text-slate-400 hover:text-white p-1.5 hover:bg-slate-800/50 rounded-xl transition-all"
@@ -823,13 +862,13 @@ export default function App() {
                 <div className="inline-flex bg-amber-500/10 text-amber-500 border border-amber-500/20 p-3.5 rounded-2xl mb-3">
                   <CreditCard className="w-7 h-7" />
                 </div>
-                <h3 className="font-extrabold text-2xl text-white">Activez MastaNote AI+ Premium</h3>
-                <p className="text-xs text-slate-400 mt-1.5 max-w-sm mx-auto">Saisissez par la voix et exportez vos canevas d'importation officiels 100% compatibles avec EducMaster.</p>
+                <h3 className="font-extrabold text-2xl text-white tracking-tight">Activez MastaNote AI+ Premium</h3>
+                <p className="text-xs text-slate-400 mt-2 max-w-sm mx-auto">Saisissez par la voix et exportez vos canevas d'importation officiels 100% compatibles avec EducMaster.</p>
               </div>
 
               {paymentStep === 'form' && (
                 <div className="space-y-5">
-                  <div className="bg-[#0B0F18] rounded-2xl p-4 border border-slate-800/80">
+                  <div className="bg-[#04060b] rounded-2xl p-4 border border-slate-800/80">
                     <div className="flex justify-between items-center mb-3 border-b border-slate-800/80 pb-2.5">
                       <span className="text-xs font-bold text-slate-400 uppercase tracking-wider">Abonnement Annuel</span>
                       <span className="text-lg font-black text-amber-400">10 000 FCFA <span className="text-xs font-normal text-slate-400">/ an</span></span>
@@ -843,12 +882,12 @@ export default function App() {
 
                   <form onSubmit={handleInitiatePayment} className="space-y-4">
                     <div>
-                      <label className="block text-xs font-bold text-slate-400 mb-1.5">Opérateur Mobile Money (Bénin)</label>
+                      <label className="block text-xs font-bold text-slate-400 mb-2">Opérateur Mobile Money (Bénin)</label>
                       <div className="grid grid-cols-2 gap-3">
                         <button
                           type="button"
                           onClick={() => setPaymentNetwork('mtn')}
-                          className={`flex items-center justify-center gap-2.5 p-3 rounded-xl border text-xs font-extrabold transition-all ${
+                          className={`flex items-center justify-center gap-2.5 p-3.5 rounded-xl border text-xs font-extrabold transition-all ${
                             paymentNetwork === 'mtn' ? 'bg-[#FFCC00]/10 border-[#FFCC00] text-[#FFCC00]' : 'border-slate-800 text-slate-400 hover:bg-slate-900/40'
                           }`}
                         >
@@ -858,7 +897,7 @@ export default function App() {
                         <button
                           type="button"
                           onClick={() => setPaymentNetwork('moov')}
-                          className={`flex items-center justify-center gap-2.5 p-3 rounded-xl border text-xs font-extrabold transition-all ${
+                          className={`flex items-center justify-center gap-2.5 p-3.5 rounded-xl border text-xs font-extrabold transition-all ${
                             paymentNetwork === 'moov' ? 'bg-[#007FFF]/10 border-[#007FFF] text-[#007FFF]' : 'border-slate-800 text-slate-400 hover:bg-slate-900/40'
                           }`}
                         >
@@ -869,7 +908,7 @@ export default function App() {
                     </div>
 
                     <div>
-                      <label className="block text-xs font-bold text-slate-400 mb-1.5">Numéro de téléphone de facturation (Bénin)</label>
+                      <label className="block text-xs font-bold text-slate-400 mb-2">Numéro de téléphone de facturation (Bénin)</label>
                       <div className="relative">
                         <span className="absolute left-4 top-1/2 transform -translate-y-1/2 text-slate-500 text-xs font-extrabold">+229</span>
                         <input
@@ -879,10 +918,10 @@ export default function App() {
                           placeholder="97 00 00 00"
                           value={paymentNumber}
                           onChange={(e) => setPaymentNumber(e.target.value.replace(/\D/g, ''))}
-                          className="w-full bg-[#080B13] border border-slate-800 rounded-xl pl-16 pr-4 py-3 text-slate-200 text-xs font-bold tracking-wider focus:outline-none focus:ring-2 focus:ring-indigo-500/50 transition-all"
+                          className="w-full bg-[#04060b] border border-slate-800 rounded-xl pl-16 pr-4 py-3 text-slate-200 text-xs font-bold tracking-wider focus:outline-none focus:ring-2 focus:ring-indigo-500/50 transition-all placeholder-slate-700"
                         />
                       </div>
-                      <p className="text-[10px] text-slate-500 mt-1.5 text-center">Une demande de validation avec saisie de votre PIN secret s'affichera sur votre écran.</p>
+                      <p className="text-[10px] text-slate-500 mt-2 text-center">Une demande de validation avec saisie de votre PIN secret s'affichera sur votre écran.</p>
                     </div>
 
                     <button
@@ -928,12 +967,12 @@ export default function App() {
           </div>
         )}
 
-        {/* --- PREMIUM NAVIGATION TAB SWITCHERS --- */}
-        <div className="flex border-b border-slate-800/40 overflow-x-auto whitespace-nowrap scrollbar-hide gap-1.5 bg-[#0B0F17]/85 p-1 rounded-2xl border border-slate-800/40 relative z-20">
+        {/* --- STREAMING_CHUNK:Rendering responsive tab navigation... --- */}
+        <div className="flex border-b border-slate-800/40 overflow-x-auto whitespace-nowrap scrollbar-hide gap-1.5 bg-[#0b0e17]/85 p-1 rounded-2xl border border-slate-800/40 relative z-20 backdrop-blur-md">
           <button
             onClick={() => setActiveTab('dashboard')}
-            className={`px-4 py-2.5 text-xs font-bold rounded-xl flex items-center gap-2 transition-all ${
-              activeTab === 'dashboard' ? 'bg-[#121826] text-white shadow-lg border border-slate-800' : 'text-slate-400 hover:text-slate-200'
+            className={`px-4 py-3 text-xs font-bold rounded-xl flex items-center gap-2 transition-all duration-300 ${
+              activeTab === 'dashboard' ? 'bg-[#151c31] text-white shadow-lg border border-slate-700/50' : 'text-slate-400 hover:text-slate-200 hover:bg-slate-900/40'
             }`}
           >
             <TrendingUp className="w-4 h-4 text-indigo-400" />
@@ -948,8 +987,8 @@ export default function App() {
                 setActiveTab('eleves');
               }
             }}
-            className={`px-4 py-2.5 text-xs font-bold rounded-xl flex items-center gap-2 transition-all ${
-              activeTab === 'saisie' ? 'bg-[#121826] text-white shadow-lg border border-slate-800' : 'text-slate-400 hover:text-slate-200'
+            className={`px-4 py-3 text-xs font-bold rounded-xl flex items-center gap-2 transition-all duration-300 ${
+              activeTab === 'saisie' ? 'bg-[#151c31] text-white shadow-lg border border-slate-700/50' : 'text-slate-400 hover:text-slate-200 hover:bg-slate-900/40'
             }`}
           >
             <Mic className="w-4 h-4 text-indigo-400" />
@@ -957,8 +996,8 @@ export default function App() {
           </button>
           <button
             onClick={() => setActiveTab('eleves')}
-            className={`px-4 py-2.5 text-xs font-bold rounded-xl flex items-center gap-2 transition-all ${
-              activeTab === 'eleves' ? 'bg-[#121826] text-white shadow-lg border border-slate-800' : 'text-slate-400 hover:text-slate-200'
+            className={`px-4 py-3 text-xs font-bold rounded-xl flex items-center gap-2 transition-all duration-300 ${
+              activeTab === 'eleves' ? 'bg-[#151c31] text-white shadow-lg border border-slate-700/50' : 'text-slate-400 hover:text-slate-200 hover:bg-slate-900/40'
             }`}
           >
             <Users className="w-4 h-4 text-indigo-400" />
@@ -966,26 +1005,26 @@ export default function App() {
           </button>
         </div>
 
-        {/* --- DASHBOARD VIEW --- */}
+        {/* --- STREAMING_CHUNK:Rendering main analytical dashboard... --- */}
         {activeTab === 'dashboard' && (
           <div className="space-y-6">
             
             {/* HERO BANNER SECTION WITH ADVANCED ACTIONS */}
-            <div className="bg-gradient-to-br from-[#101423] via-[#0F121C] to-[#0A0D14] border border-slate-800/80 rounded-3xl p-6 relative overflow-hidden shadow-2xl">
-              <div className="absolute top-0 right-0 p-4 opacity-5 pointer-events-none">
-                <FileSpreadsheet className="w-48 h-48" />
+            <div className="bg-gradient-to-br from-[#0c101d] via-[#090b14] to-[#05060b] border border-slate-800/80 rounded-3xl p-6 relative overflow-hidden shadow-2xl">
+              <div className="absolute top-0 right-0 p-4 opacity-[0.03] pointer-events-none">
+                <FileSpreadsheet className="w-56 h-56" />
               </div>
               
               <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-6 relative z-10">
-                <div className="space-y-1.5">
-                  <h2 className="font-extrabold text-xl sm:text-2xl text-white">Classe : {activeClass?.nom}</h2>
-                  <p className="text-slate-400 text-xs sm:text-sm">Remplissez les évaluations de vos élèves, profitez des outils de remédiation par IA puis exportez.</p>
+                <div className="space-y-2">
+                  <h2 className="font-extrabold text-xl sm:text-2xl text-white tracking-tight">Classe : {activeClass?.nom}</h2>
+                  <p className="text-slate-400 text-xs sm:text-sm leading-relaxed max-w-xl">Remplissez les évaluations de vos élèves, profitez des outils de remédiation par IA puis exportez.</p>
                   
                   <div className="flex flex-wrap gap-2 pt-2">
-                    <span className="bg-[#121624] text-slate-300 text-[10px] font-bold px-3 py-1.5 rounded-xl border border-slate-800">
+                    <span className="bg-[#121625]/60 text-slate-300 text-[10px] font-bold px-3 py-1.5 rounded-xl border border-slate-800/50">
                       {activeClass?.eleves.length || 0} Élèves inscrits
                     </span>
-                    <span className="bg-[#121624] text-slate-300 text-[10px] font-bold px-3 py-1.5 rounded-xl border border-slate-800">
+                    <span className="bg-[#121625]/60 text-slate-300 text-[10px] font-bold px-3 py-1.5 rounded-xl border border-slate-800/50">
                       Niveau : {activeClass?.niveau}
                     </span>
                   </div>
@@ -994,7 +1033,7 @@ export default function App() {
                 <div className="flex flex-wrap gap-2.5">
                   <button
                     onClick={handleGenerateClassDiagnostic}
-                    className="bg-[#121625] hover:bg-slate-800/80 text-indigo-300 border border-indigo-500/20 font-bold text-xs px-4 py-3 rounded-xl flex items-center justify-center gap-2 transition-all active:scale-95"
+                    className="bg-[#121625] hover:bg-slate-800/80 text-indigo-300 border border-indigo-500/20 font-bold text-xs px-4 py-3 rounded-xl flex items-center justify-center gap-2 transition-all active:scale-95 hover:border-indigo-500/40 hover:shadow-lg hover:shadow-indigo-500/5"
                   >
                     <Sparkles className="w-4 h-4 text-indigo-400" />
                     Bilan Scolaire IA
@@ -1008,7 +1047,7 @@ export default function App() {
                   </button>
                   <button
                     onClick={exportToEducMaster}
-                    className="bg-gradient-to-r from-emerald-500 to-teal-500 text-[#090D14] font-black text-xs px-4 py-3 rounded-xl flex items-center justify-center gap-2 transition-all active:scale-95 shadow-md"
+                    className="bg-gradient-to-r from-emerald-500 to-teal-500 text-slate-950 font-black text-xs px-4 py-3 rounded-xl flex items-center justify-center gap-2 transition-all active:scale-95 shadow-md shadow-emerald-500/10"
                   >
                     <Download className="w-4 h-4" />
                     Exporter EducMaster
@@ -1025,10 +1064,10 @@ export default function App() {
                   <button
                     key={m.id}
                     onClick={() => setActiveMatiere(m.id)}
-                    className={`px-3.5 py-2.5 text-xs font-bold rounded-xl border shrink-0 transition-all active:scale-95 ${
+                    className={`px-4 py-2.5 text-xs font-bold rounded-xl border shrink-0 transition-all duration-300 active:scale-95 ${
                       activeMatiere === m.id 
-                        ? 'bg-indigo-500/10 border-indigo-500/40 text-indigo-300 shadow-md' 
-                        : 'bg-[#0B0E17]/80 border-slate-800/80 text-slate-400 hover:text-slate-300'
+                        ? 'bg-indigo-500/15 border-indigo-500/40 text-indigo-300 shadow-md shadow-indigo-500/5' 
+                        : 'bg-[#080b12]/80 border-slate-800/80 text-slate-400 hover:text-slate-300 hover:bg-[#0c101d]'
                     }`}
                   >
                     {m.label}
@@ -1037,53 +1076,55 @@ export default function App() {
               </div>
             </div>
 
+            {}
             {/* STATS OVERVIEW DECORATED CARDS */}
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-              <div className="bg-[#0B0E16]/80 border border-slate-800/80 p-5 rounded-2xl flex items-center gap-4 shadow-md">
+              <div className="bg-[#0c101d] border border-slate-800/60 p-5 rounded-2xl flex items-center gap-4 shadow-md hover:border-slate-700/60 transition-all">
                 <div className="p-3 bg-indigo-500/10 rounded-xl text-indigo-400 shrink-0">
                   <TrendingUp className="w-5 h-5" />
                 </div>
                 <div>
                   <p className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">Moyenne Générale</p>
-                  <p className="text-xl font-extrabold text-white">{stats.moyenne} <span className="text-xs font-medium text-slate-400">/20</span></p>
+                  <p className="text-xl font-extrabold text-white mt-1">{stats.moyenne} <span className="text-xs font-medium text-slate-500">/20</span></p>
                 </div>
               </div>
 
-              <div className="bg-[#0B0E16]/80 border border-slate-800/80 p-5 rounded-2xl flex items-center gap-4 shadow-md">
+              <div className="bg-[#0c101d] border border-slate-800/60 p-5 rounded-2xl flex items-center gap-4 shadow-md hover:border-slate-700/60 transition-all">
                 <div className="p-3 bg-emerald-500/10 rounded-xl text-emerald-400 shrink-0">
                   <Award className="w-5 h-5" />
                 </div>
                 <div>
                   <p className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">Taux de passage</p>
-                  <p className="text-xl font-extrabold text-white">{stats.taux}%</p>
+                  <p className="text-xl font-extrabold text-white mt-1">{stats.taux}%</p>
                 </div>
               </div>
 
-              <div className="bg-[#0B0E16]/80 border border-slate-800/80 p-5 rounded-2xl flex items-center gap-4 shadow-md">
+              <div className="bg-[#0c101d] border border-slate-800/60 p-5 rounded-2xl flex items-center gap-4 shadow-md hover:border-slate-700/60 transition-all">
                 <div className="p-3 bg-amber-500/10 rounded-xl text-amber-400 shrink-0">
                   <Users className="w-5 h-5" />
                 </div>
                 <div>
                   <p className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">Évaluations Saisies</p>
-                  <p className="text-xl font-extrabold text-white">{stats.saisis} <span className="text-xs font-medium text-slate-400">/ {stats.totalEleves}</span></p>
+                  <p className="text-xl font-extrabold text-white mt-1">{stats.saisis} <span className="text-xs font-medium text-slate-500">/ {stats.totalEleves}</span></p>
                 </div>
               </div>
 
-              <div className="bg-[#0B0E16]/80 border border-slate-800/80 p-5 rounded-2xl flex items-center gap-4 shadow-md">
+              <div className="bg-[#0c101d] border border-slate-800/60 p-5 rounded-2xl flex items-center gap-4 shadow-md hover:border-slate-700/60 transition-all">
                 <div className="p-3 bg-purple-500/10 rounded-xl text-purple-400 shrink-0">
                   <Award className="w-5 h-5" />
                 </div>
                 <div className="overflow-hidden">
                   <p className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">Premier de la classe</p>
-                  <p className="text-xs font-extrabold text-white truncate max-w-[140px]" title={stats.top}>{stats.top}</p>
+                  <p className="text-xs font-extrabold text-white truncate max-w-[140px] mt-1" title={stats.top}>{stats.top}</p>
                 </div>
               </div>
             </div>
 
+            {/* --- STREAMING_CHUNK:Rendering primary grades ledger table... --- */}
             {/* CLASS GRAD RATING GRIDS */}
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
               
-              <div className="bg-[#0B0E16]/90 border border-slate-800/80 rounded-2xl p-5 lg:col-span-2 space-y-4 shadow-lg">
+              <div className="bg-[#0c101d]/80 border border-slate-800/60 rounded-2xl p-5 lg:col-span-2 space-y-4 shadow-lg">
                 <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2 border-b border-slate-800/60 pb-3">
                   <h4 className="font-extrabold text-sm text-white flex items-center gap-2">
                     <FileSpreadsheet className="text-indigo-400 w-4.5 h-4.5" />
@@ -1092,62 +1133,62 @@ export default function App() {
                   <span className="text-[11px] text-slate-500 italic">Actions pédagogiques assistées par IA</span>
                 </div>
 
-                <div className="overflow-x-auto">
+                <div className="overflow-x-auto rounded-xl border border-slate-800/50">
                   <table className="w-full text-left text-xs text-slate-300">
-                    <thead className="bg-[#121625] text-slate-400 uppercase font-black tracking-wide">
+                    <thead className="bg-[#04060b] text-slate-400 uppercase font-bold tracking-wider">
                       <tr>
-                        <th className="px-3 py-3 rounded-l-xl">Matricule</th>
-                        <th className="px-3 py-3">Élève</th>
-                        <th className="px-3 py-3 text-center">Note obtenue (/20)</th>
-                        <th className="px-3 py-3 text-center">Perf (/20)</th>
-                        <th className="px-3 py-3 text-center">Statut</th>
-                        <th className="px-3 py-3 text-right rounded-r-xl">Outils intelligents ✨</th>
+                        <th className="px-4 py-3.5">Matricule</th>
+                        <th className="px-4 py-3.5">Élève</th>
+                        <th className="px-4 py-3.5 text-center">Note obtenue (/20)</th>
+                        <th className="px-4 py-3.5 text-center">Perf (/20)</th>
+                        <th className="px-4 py-3.5 text-center">Statut</th>
+                        <th className="px-4 py-3.5 text-right">Outils intelligents ✨</th>
                       </tr>
                     </thead>
-                    <tbody className="divide-y divide-slate-800/40">
+                    <tbody className="divide-y divide-slate-800/40 bg-[#0c101d]/40">
                       {activeClass?.eleves.map(el => {
                         const noteData = notes[selectedClassId]?.[activeMatiere]?.[el.id] || {};
                         const n = noteData.note;
                         const p = noteData.perf;
                         return (
-                          <tr key={el.id} className="hover:bg-slate-900/40 transition-colors">
-                            <td className="px-3 py-3 font-semibold text-slate-400">{el.matricule}</td>
-                            <td className="px-3 py-3 font-bold text-white">{el.nom} {el.prenoms}</td>
-                            <td className="px-3 py-3 text-center font-black">
+                          <tr key={el.id} className="hover:bg-slate-900/30 transition-all duration-150">
+                            <td className="px-4 py-3 font-semibold text-slate-400">{el.matricule}</td>
+                            <td className="px-4 py-3 font-extrabold text-white">{el.nom} {el.prenoms}</td>
+                            <td className="px-4 py-3 text-center font-black">
                               {n !== undefined ? (
                                 <span className={n >= 10 ? 'text-emerald-400' : 'text-rose-400'}>{n}</span>
                               ) : (
-                                <span className="text-slate-600">-</span>
+                                <span className="text-slate-600 font-normal">-</span>
                               )}
                             </td>
-                            <td className="px-3 py-3 text-center font-bold">
-                              {p !== undefined ? <span className="text-indigo-300">{p}</span> : <span className="text-slate-600">-</span>}
+                            <td className="px-4 py-3 text-center font-bold">
+                              {p !== undefined ? <span className="text-indigo-300">{p}</span> : <span className="text-slate-600 font-normal">-</span>}
                             </td>
-                            <td className="px-3 py-3 text-center">
+                            <td className="px-4 py-3 text-center">
                               {n !== undefined ? (
                                 n >= 10 ? (
-                                  <span className="bg-emerald-500/10 text-emerald-400 text-[9px] font-black px-2 py-0.5 rounded uppercase">Moyen</span>
+                                  <span className="bg-emerald-500/10 text-emerald-400 text-[9px] font-black px-2.5 py-1 rounded-full uppercase">Admis</span>
                                 ) : (
-                                  <span className="bg-rose-500/10 text-rose-400 text-[9px] font-black px-2 py-0.5 rounded uppercase">Faible</span>
+                                  <span className="bg-rose-500/10 text-rose-400 text-[9px] font-black px-2.5 py-1 rounded-full uppercase">Faible</span>
                                 )
                               ) : (
                                 <span className="text-[10px] text-slate-600 italic">Vide</span>
                               )}
                             </td>
-                            <td className="px-3 py-3 text-right">
+                            <td className="px-4 py-3 text-right">
                               <div className="flex justify-end gap-1.5">
                                 <button
                                   onClick={() => handleGenerateStudentAppreciation(el)}
-                                  className="px-2.5 py-1 text-[10px] font-bold bg-indigo-500/10 hover:bg-indigo-500/20 text-indigo-300 border border-indigo-500/20 rounded-lg transition-all flex items-center gap-1 active:scale-95"
+                                  className="px-2.5 py-1.5 text-[10px] font-bold bg-indigo-500/10 hover:bg-indigo-500/20 text-indigo-300 border border-indigo-500/20 rounded-lg transition-all flex items-center gap-1 active:scale-95"
                                 >
-                                  <FileText className="w-3 h-3" />
+                                  <FileText className="w-3 h-3 text-indigo-400" />
                                   Appréciation
                                 </button>
                                 <button
                                   onClick={() => handleGenerateRemediationPlan(el)}
-                                  className="px-2.5 py-1 text-[10px] font-bold bg-teal-500/10 hover:bg-teal-500/20 text-teal-300 border border-teal-500/20 rounded-lg transition-all flex items-center gap-1 active:scale-95"
+                                  className="px-2.5 py-1.5 text-[10px] font-bold bg-teal-500/10 hover:bg-teal-500/20 text-teal-300 border border-teal-500/20 rounded-lg transition-all flex items-center gap-1 active:scale-95"
                                 >
-                                  <BrainCircuit className="w-3 h-3" />
+                                  <BrainCircuit className="w-3 h-3 text-teal-400" />
                                   Soutien
                                 </button>
                               </div>
@@ -1160,10 +1201,11 @@ export default function App() {
                 </div>
               </div>
 
+              {/* --- STREAMING_CHUNK:Rendering analytical diagnostic sidebar... --- */}
               {/* CARD ANALYTIC SIDEBAR */}
-              <div className="bg-[#0B0E16]/90 border border-slate-800/80 rounded-2xl p-5 space-y-4 flex flex-col justify-between shadow-lg">
-                <div>
-                  <h4 className="font-extrabold text-sm text-white mb-3 flex items-center gap-2">
+              <div className="bg-[#0c101d]/80 border border-slate-800/60 rounded-2xl p-5 space-y-4 flex flex-col justify-between shadow-lg">
+                <div className="space-y-2">
+                  <h4 className="font-extrabold text-sm text-white flex items-center gap-2">
                     <AlertTriangle className="text-amber-500 w-4.5 h-4.5" />
                     Aide au diagnostic
                   </h4>
@@ -1173,14 +1215,14 @@ export default function App() {
                 </div>
 
                 <div className="space-y-3">
-                  <div className="bg-[#121624] p-3 rounded-xl border border-slate-800/60">
+                  <div className="bg-[#04060b] p-4 rounded-xl border border-slate-800/60">
                     <p className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">Plus forte performance</p>
-                    <p className="text-xs font-black text-indigo-400 mt-0.5">{stats.top}</p>
+                    <p className="text-xs font-black text-indigo-400 mt-1.5">{stats.top}</p>
                   </div>
 
-                  <div className="bg-[#121624] p-3 rounded-xl border border-slate-800/60">
+                  <div className="bg-[#04060b] p-4 rounded-xl border border-slate-800/60">
                     <p className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">Besoins d'accompagnement</p>
-                    <p className="text-xs font-black text-rose-400 mt-0.5">{stats.flop}</p>
+                    <p className="text-xs font-black text-rose-400 mt-1.5">{stats.flop}</p>
                   </div>
                 </div>
 
@@ -1194,34 +1236,35 @@ export default function App() {
           </div>
         )}
 
+        {/* --- STREAMING_CHUNK:Rendering mobile-first vocal dictation terminal... --- */}
         {/* --- MOBILE-FIRST DICTEE VOCALE & SAISIE INTERFACE --- */}
         {activeTab === 'saisie' && activeClass?.eleves.length > 0 && (
-          <div className="max-w-xl mx-auto w-full space-y-6 animate-in fade-in slide-in-from-bottom-2 duration-200">
+          <div className="max-w-xl mx-auto w-full space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-300">
             
             <div className="flex items-center justify-between">
               <button 
                 onClick={() => setActiveTab('dashboard')} 
-                className="text-slate-400 hover:text-white flex items-center gap-1.5 text-xs font-semibold"
+                className="text-slate-400 hover:text-white flex items-center gap-1.5 text-xs font-semibold group"
               >
-                <ArrowLeft className="w-3.5 h-3.5" />
+                <ArrowLeft className="w-3.5 h-3.5 group-hover:-translate-x-0.5 transition-transform" />
                 Tableau de bord
               </button>
 
-              <span className="text-xs text-slate-400 font-bold bg-[#121625] border border-slate-800 px-3 py-1 rounded-full">
+              <span className="text-xs text-slate-400 font-bold bg-[#0c101d] border border-slate-800 px-3.5 py-1.5 rounded-full">
                 {currentSaisieIndex + 1} / {activeClass.eleves.length} élèves
               </span>
             </div>
 
             {/* SELECTION RAPIDE MATIÈRE SAISIE */}
-            <div className="bg-[#0B0E16] border border-slate-800/80 p-2.5 rounded-2xl">
-              <label className="block text-[9px] font-black text-slate-500 uppercase tracking-wider mb-1 px-1">Matière de saisie</label>
+            <div className="bg-[#0c101d] border border-slate-800/60 p-3 rounded-2xl">
+              <label className="block text-[9px] font-black text-slate-500 uppercase tracking-wider mb-1.5 px-1">Matière de saisie</label>
               <select
                 value={activeMatiere}
                 onChange={(e) => {
                   setActiveMatiere(e.target.value);
                   setCurrentSaisieIndex(0);
                 }}
-                className="w-full bg-[#121624] border border-slate-800/80 text-slate-200 text-xs font-bold rounded-xl px-3 py-2.5 focus:outline-none focus:ring-1 focus:ring-indigo-500 transition-all cursor-pointer"
+                className="w-full bg-[#04060b] border border-slate-800/80 text-slate-200 text-xs font-bold rounded-xl px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-indigo-500/50 transition-all cursor-pointer"
               >
                 {MATIERES_PRIMAIRE.map(m => (
                   <option key={m.id} value={m.id}>{m.label}</option>
@@ -1230,38 +1273,38 @@ export default function App() {
             </div>
 
             {/* BOX DE SAISIE CENTRAL */}
-            <div className="bg-gradient-to-tr from-[#0F1321] to-[#0A0D15] border border-slate-800/80 rounded-3xl p-6 shadow-2xl relative overflow-hidden">
-              <div className="absolute top-0 right-0 -mr-6 -mt-6 w-24 h-24 bg-indigo-500/5 rounded-full blur-xl" />
+            <div className="bg-gradient-to-tr from-[#0c101d] to-[#05060b] border border-slate-800/80 rounded-3xl p-6 shadow-2xl relative overflow-hidden">
+              <div className="absolute top-0 right-0 -mr-6 -mt-6 w-32 h-32 bg-indigo-500/5 rounded-full blur-2xl" />
 
-              <div className="text-center space-y-1 mb-6">
-                <span className="text-[10px] font-black text-slate-500 tracking-widest uppercase bg-[#121624] border border-slate-800/60 px-3 py-1 rounded-full">
+              <div className="text-center space-y-1.5 mb-6">
+                <span className="text-[10px] font-black text-slate-500 tracking-widest uppercase bg-[#04060b] border border-slate-800/60 px-3.5 py-1 rounded-full">
                   Matricule : {activeEleve?.matricule || '-'}
                 </span>
-                <h3 className="text-xl font-black text-white pt-3">
+                <h3 className="text-2xl font-black text-white pt-3">
                   {activeEleve?.nom}
                 </h3>
-                <p className="text-indigo-400 text-xs font-semibold">
+                <p className="text-indigo-400 text-sm font-semibold">
                   {activeEleve?.prenoms}
                 </p>
               </div>
 
               {/* MODULE VOCAL INTELLIGENT */}
-              <div className="bg-[#121624]/60 border border-slate-800 rounded-2xl p-4 mb-6 space-y-3 text-center relative overflow-hidden">
+              <div className="bg-[#04060b] border border-slate-800/80 rounded-2xl p-5 mb-6 space-y-4 text-center relative overflow-hidden">
                 <div className="flex items-center justify-between">
-                  <span className="text-[9px] font-bold text-slate-400 uppercase tracking-widest">Saisie Vocale intelligente</span>
-                  {isListening && <span className="w-2 h-2 rounded-full bg-rose-500 animate-ping" />}
+                  <span className="text-[9px] font-bold text-slate-500 uppercase tracking-widest">Saisie Vocale intelligente</span>
+                  {isListening && <span className="w-2.5 h-2.5 rounded-full bg-rose-500 animate-ping" />}
                 </div>
 
-                <div className="flex items-center justify-center py-1">
+                <div className="flex items-center justify-center py-2">
                   <button
                     onClick={toggleListening}
-                    className={`p-4 rounded-full shadow-lg transition-all transform active:scale-90 ${
+                    className={`p-4 rounded-full shadow-lg transition-all duration-300 transform active:scale-90 ${
                       isListening 
                         ? 'bg-rose-600 text-white animate-pulse shadow-rose-900/25' 
-                        : 'bg-indigo-600 hover:bg-indigo-700 text-white hover:shadow-indigo-900/25'
+                        : 'bg-indigo-600 hover:bg-indigo-700 text-white shadow-indigo-900/25'
                     }`}
                   >
-                    {isListening ? <MicOff className="w-5 h-5" /> : <Mic className="w-5 h-5" />}
+                    {isListening ? <MicOff className="w-6 h-6" /> : <Mic className="w-6 h-6" />}
                   </button>
                 </div>
 
@@ -1272,7 +1315,7 @@ export default function App() {
 
               {/* INPUT FIELDS */}
               <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-1.5">
+                <div className="space-y-2">
                   <label className="block text-xs font-bold text-slate-400 uppercase tracking-wider text-center">Note Obtenue</label>
                   <input
                     type="number"
@@ -1282,11 +1325,11 @@ export default function App() {
                     placeholder="Note /20"
                     value={tempNote}
                     onChange={(e) => setTempNote(e.target.value)}
-                    className="w-full bg-[#080B13] border border-slate-800 rounded-2xl px-3 py-3 text-center text-lg font-black text-white focus:outline-none focus:ring-2 focus:ring-indigo-500/50 transition-all placeholder-slate-700"
+                    className="w-full bg-[#04060b] border border-slate-800 rounded-2xl px-3 py-4 text-center text-xl font-black text-white focus:outline-none focus:ring-2 focus:ring-indigo-500/50 transition-all placeholder-slate-800"
                   />
                 </div>
 
-                <div className="space-y-1.5">
+                <div className="space-y-2">
                   <label className="block text-xs font-bold text-slate-400 uppercase tracking-wider text-center">Perfectionnement</label>
                   <input
                     type="number"
@@ -1296,7 +1339,7 @@ export default function App() {
                     placeholder="Soin /20"
                     value={tempPerf}
                     onChange={(e) => setTempPerf(e.target.value)}
-                    className="w-full bg-[#080B13] border border-slate-800 rounded-2xl px-3 py-3 text-center text-lg font-black text-indigo-300 focus:outline-none focus:ring-2 focus:ring-indigo-500/50 transition-all placeholder-slate-700"
+                    className="w-full bg-[#04060b] border border-slate-800 rounded-2xl px-3 py-4 text-center text-xl font-black text-indigo-300 focus:outline-none focus:ring-2 focus:ring-indigo-500/50 transition-all placeholder-slate-800"
                   />
                 </div>
               </div>
@@ -1306,14 +1349,14 @@ export default function App() {
                 <button
                   onClick={handlePrev}
                   disabled={currentSaisieIndex === 0}
-                  className="flex-1 bg-[#121624] hover:bg-slate-800 text-slate-300 text-xs font-bold py-3 rounded-xl border border-slate-800/60 disabled:opacity-30 transition-all active:scale-95"
+                  className="flex-1 bg-[#04060b] hover:bg-slate-900 text-slate-300 text-xs font-bold py-3.5 rounded-xl border border-slate-800/60 disabled:opacity-30 transition-all active:scale-95"
                 >
                   Précédent
                 </button>
 
                 <button
                   onClick={handleSaveAndNext}
-                  className="flex-2 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-extrabold py-3 px-5 rounded-xl shadow-lg shadow-indigo-950/40 flex items-center justify-center gap-1.5 transition-all active:scale-95"
+                  className="flex-2 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-extrabold py-3.5 px-6 rounded-xl shadow-lg shadow-indigo-950/40 flex items-center justify-center gap-1.5 transition-all active:scale-95"
                 >
                   Enregistrer & Suivant
                   <ChevronRight className="w-4 h-4" />
@@ -1329,55 +1372,56 @@ export default function App() {
           </div>
         )}
 
+        {/* --- STREAMING_CHUNK:Rendering student roster and registration forms... --- */}
         {/* --- STUDENTS MANAGEMENT ROSTERS --- */}
         {activeTab === 'eleves' && (
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-6 animate-in fade-in duration-200">
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-6 animate-in fade-in duration-300">
             
-            <div className="bg-[#0B0E16]/90 border border-slate-800/80 rounded-2xl p-5 space-y-4 h-fit">
+            <div className="bg-[#0c101d] border border-slate-800/60 rounded-2xl p-5 space-y-4 h-fit shadow-lg">
               <h4 className="font-extrabold text-white text-sm flex items-center gap-2">
-                <Plus className="text-indigo-400" />
+                <Plus className="text-indigo-400 w-4 h-4" />
                 Ajouter un élève
               </h4>
 
-              <form onSubmit={handleAddStudent} className="space-y-3.5">
+              <form onSubmit={handleAddStudent} className="space-y-4">
                 <div>
-                  <label className="block text-xs font-bold text-slate-400 mb-1">Nom de famille</label>
+                  <label className="block text-xs font-bold text-slate-400 mb-1.5">Nom de famille</label>
                   <input
                     type="text"
                     required
                     placeholder="Saisissez en majuscules"
                     value={newStudentNom}
                     onChange={(e) => setNewStudentNom(e.target.value)}
-                    className="w-full bg-[#121624] border border-slate-800/80 rounded-xl px-3 py-2 text-slate-200 text-xs focus:outline-none focus:ring-1 focus:ring-indigo-500 transition-all font-semibold"
+                    className="w-full bg-[#04060b] border border-slate-800 rounded-xl px-3.5 py-2.5 text-slate-200 text-xs focus:outline-none focus:ring-1 focus:ring-indigo-500 transition-all font-semibold placeholder-slate-700"
                   />
                 </div>
 
                 <div>
-                  <label className="block text-xs font-bold text-slate-400 mb-1">Prénoms</label>
+                  <label className="block text-xs font-bold text-slate-400 mb-1.5">Prénoms</label>
                   <input
                     type="text"
                     required
                     placeholder="Saisissez les prénoms"
                     value={newStudentPrenoms}
                     onChange={(e) => setNewStudentPrenoms(e.target.value)}
-                    className="w-full bg-[#121624] border border-slate-800/80 rounded-xl px-3 py-2 text-slate-200 text-xs focus:outline-none focus:ring-1 focus:ring-indigo-500 transition-all font-semibold"
+                    className="w-full bg-[#04060b] border border-slate-800 rounded-xl px-3.5 py-2.5 text-slate-200 text-xs focus:outline-none focus:ring-1 focus:ring-indigo-500 transition-all font-semibold placeholder-slate-700"
                   />
                 </div>
 
                 <div>
-                  <label className="block text-xs font-bold text-slate-400 mb-1">Numéro Matricule EducMaster</label>
+                  <label className="block text-xs font-bold text-slate-400 mb-1.5">Numéro Matricule EducMaster</label>
                   <input
                     type="text"
                     placeholder="Généré automatiquement si vide"
                     value={newStudentMatricule}
                     onChange={(e) => setNewStudentMatricule(e.target.value)}
-                    className="w-full bg-[#121624] border border-slate-800/80 rounded-xl px-3 py-2 text-slate-200 text-xs focus:outline-none focus:ring-1 focus:ring-indigo-500 transition-all font-semibold"
+                    className="w-full bg-[#04060b] border border-slate-800 rounded-xl px-3.5 py-2.5 text-slate-200 text-xs focus:outline-none focus:ring-1 focus:ring-indigo-500 transition-all font-semibold placeholder-slate-700"
                   />
                 </div>
 
                 <button
                   type="submit"
-                  className="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-extrabold text-xs py-2.5 rounded-xl transition-all flex items-center justify-center gap-1.5 shadow-md shadow-indigo-950/25 active:scale-95"
+                  className="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-extrabold text-xs py-3 rounded-xl transition-all flex items-center justify-center gap-1.5 shadow-md shadow-indigo-950/25 active:scale-95"
                 >
                   <Plus className="w-4 h-4" />
                   Ajouter à la classe
@@ -1386,7 +1430,7 @@ export default function App() {
             </div>
 
             {/* LISTING ROSTER */}
-            <div className="bg-[#0B0E16]/90 border border-slate-800/80 rounded-2xl p-5 md:col-span-2 shadow-md">
+            <div className="bg-[#0c101d] border border-slate-800/60 rounded-2xl p-5 md:col-span-2 shadow-lg">
               <div className="flex items-center justify-between mb-4">
                 <h4 className="font-extrabold text-white text-sm flex items-center gap-2">
                   <Users className="text-indigo-400 w-5 h-5" />
@@ -1396,29 +1440,29 @@ export default function App() {
               </div>
 
               {activeClass?.eleves.length === 0 ? (
-                <div className="text-center py-14 space-y-2 border border-dashed border-slate-800/80 rounded-xl">
+                <div className="text-center py-16 space-y-2 border border-dashed border-slate-800/80 rounded-xl bg-[#04060b]/40">
                   <p className="text-xs font-bold text-slate-400">Aucun élève enregistré.</p>
                   <p className="text-[10px] text-slate-600">Renseignez le formulaire à gauche pour inscrire vos élèves.</p>
                 </div>
               ) : (
-                <div className="overflow-x-auto">
+                <div className="overflow-x-auto rounded-xl border border-slate-800/50">
                   <table className="w-full text-left text-xs text-slate-300">
-                    <thead className="bg-[#121625] text-slate-400 font-black uppercase tracking-wide">
+                    <thead className="bg-[#04060b] text-slate-400 font-bold uppercase tracking-wider">
                       <tr>
-                        <th className="px-4 py-3 rounded-l-xl">Matricule</th>
-                        <th className="px-4 py-3">Nom complet</th>
-                        <th className="px-4 py-3 text-right rounded-r-xl">Actions</th>
+                        <th className="px-4 py-3.5">Matricule</th>
+                        <th className="px-4 py-3.5">Nom complet</th>
+                        <th className="px-4 py-3.5 text-right">Actions</th>
                       </tr>
                     </thead>
-                    <tbody className="divide-y divide-slate-800/40">
+                    <tbody className="divide-y divide-slate-800/40 bg-[#0c101d]/40">
                       {activeClass?.eleves.map(el => (
-                        <tr key={el.id} className="hover:bg-slate-900/30 transition-all">
-                          <td className="px-4 py-3 font-semibold text-slate-400">{el.matricule}</td>
-                          <td className="px-4 py-3 font-bold text-white">{el.nom} {el.prenoms}</td>
-                          <td className="px-4 py-3 text-right">
+                        <tr key={el.id} className="hover:bg-slate-900/20 transition-all">
+                          <td className="px-4 py-3.5 font-semibold text-slate-400">{el.matricule}</td>
+                          <td className="px-4 py-3.5 font-extrabold text-white">{el.nom} {el.prenoms}</td>
+                          <td className="px-4 py-3.5 text-right">
                             <button
                               onClick={() => handleDeleteStudent(el.id)}
-                              className="p-1.5 bg-rose-500/10 border border-rose-500/20 text-rose-400 rounded-lg hover:bg-rose-500/25 transition-all"
+                              className="p-2 bg-rose-500/10 border border-rose-500/20 text-rose-400 rounded-lg hover:bg-rose-500/20 transition-all duration-300"
                               title="Retirer cet élève"
                             >
                               <Trash2 className="w-4 h-4" />
@@ -1435,40 +1479,47 @@ export default function App() {
           </div>
         )}
 
+        {/* --- STREAMING_CHUNK:Rendering administrative application settings... --- */}
         {/* --- SYSTEM SETTINGS TAB --- */}
         {activeTab === 'parametres' && (
-          <div className="max-w-2xl mx-auto w-full space-y-6 animate-in fade-in duration-200">
+          <div className="max-w-2xl mx-auto w-full space-y-6 animate-in fade-in duration-300">
             <h3 className="font-extrabold text-lg text-white">Paramètres d'administration</h3>
             
-            <div className="bg-[#0B0E16]/90 border border-slate-800/80 rounded-2xl p-5 space-y-4 shadow-md">
-              <h4 className="font-bold text-slate-200 text-xs">Profil Enseignant</h4>
+            <div className="bg-[#0c101d] border border-slate-800/60 rounded-2xl p-5 space-y-4 shadow-md">
+              <h4 className="font-bold text-slate-200 text-xs flex items-center gap-2">
+                <User className="w-4 h-4 text-indigo-400" />
+                Profil Enseignant
+              </h4>
               
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1">Nom d'Enseignant</label>
+                  <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-2">Nom d'Enseignant</label>
                   <input
                     type="text"
                     value={user.nom}
                     onChange={(e) => setUser(prev => ({ ...prev, nom: e.target.value }))}
-                    className="w-full bg-[#121624] border border-slate-800/80 rounded-xl px-3.5 py-2.5 text-slate-200 text-xs focus:outline-none focus:ring-1 focus:ring-indigo-500 transition-all font-semibold"
+                    className="w-full bg-[#04060b] border border-slate-800 rounded-xl px-3.5 py-3 text-slate-200 text-xs focus:outline-none focus:ring-1 focus:ring-indigo-500 transition-all font-semibold"
                   />
                 </div>
                 <div>
-                  <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1">Téléphone d'usage</label>
+                  <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-2">Téléphone d'usage</label>
                   <input
                     type="tel"
                     value={user.tel}
                     onChange={(e) => setUser(prev => ({ ...prev, tel: e.target.value }))}
-                    className="w-full bg-[#121624] border border-slate-800/80 rounded-xl px-3.5 py-2.5 text-slate-200 text-xs focus:outline-none focus:ring-1 focus:ring-indigo-500 transition-all font-semibold"
+                    className="w-full bg-[#04060b] border border-slate-800 rounded-xl px-3.5 py-3 text-slate-200 text-xs focus:outline-none focus:ring-1 focus:ring-indigo-500 transition-all font-semibold"
                   />
                 </div>
               </div>
             </div>
 
-            <div className="bg-[#0B0E16]/90 border border-slate-800/80 rounded-2xl p-5 space-y-4 shadow-md">
-              <h4 className="font-bold text-slate-200 text-xs">Abonnement MastaNote</h4>
+            <div className="bg-[#0c101d] border border-slate-800/60 rounded-2xl p-5 space-y-4 shadow-md">
+              <h4 className="font-bold text-slate-200 text-xs flex items-center gap-2">
+                <Award className="w-4 h-4 text-indigo-400" />
+                Abonnement MastaNote
+              </h4>
               
-              <div className="flex justify-between items-center bg-[#121624] p-4 rounded-xl border border-slate-800/60">
+              <div className="flex justify-between items-center bg-[#04060b] p-4 rounded-xl border border-slate-800/60">
                 <div>
                   <p className="text-[10px] font-bold text-slate-400">Statut actuel du compte :</p>
                   <p className="text-xs font-black text-white mt-1">
@@ -1478,7 +1529,7 @@ export default function App() {
                 {user.statut_abonnement === 'demo' && (
                   <button
                     onClick={() => setPaywallModal(true)}
-                    className="bg-[#121826] hover:bg-slate-800/60 border border-slate-800 text-white font-extrabold text-xs px-4 py-2.5 rounded-xl transition-all"
+                    className="bg-indigo-600 hover:bg-indigo-700 text-white font-extrabold text-xs px-4 py-2.5 rounded-xl transition-all"
                   >
                     Activer
                   </button>
@@ -1486,8 +1537,11 @@ export default function App() {
               </div>
             </div>
 
-            <div className="bg-[#0B0E16]/90 border border-slate-800/80 rounded-2xl p-5 space-y-3 shadow-md">
-              <h4 className="font-bold text-rose-400 text-xs">Danger Zone</h4>
+            <div className="bg-[#0c101d] border border-slate-800/60 rounded-2xl p-5 space-y-3 shadow-md">
+              <h4 className="font-bold text-rose-400 text-xs flex items-center gap-2">
+                <Trash2 className="w-4 h-4 text-rose-400" />
+                Zone de danger
+              </h4>
               <p className="text-[11px] text-slate-400">Permet de vider intégralement la base locale de stockage pour purger toutes les données d'évaluation.</p>
               
               <button
@@ -1502,8 +1556,9 @@ export default function App() {
 
       </main>
 
+      {/* --- STREAMING_CHUNK:Rendering footer information and credentials... --- */}
       {/* FOOTER */}
-      <footer className="bg-[#080B10] border-t border-slate-800/80 px-4 py-4 text-center text-xs text-slate-500 relative z-10">
+      <footer className="bg-[#04060b] border-t border-slate-800/80 px-4 py-5 text-center text-xs text-slate-500 relative z-10">
         <div className="max-w-6xl mx-auto flex flex-col sm:flex-row items-center justify-between gap-3">
           <p>© 2026 MastaNote AI+ - Spécial Primaire Bénin (CI à CM2). Tous droits réservés.</p>
           <div className="flex gap-4">
