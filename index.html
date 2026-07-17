@@ -22,32 +22,14 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet" />
 
-    <!-- Script de secours Tailwind CDN -->
+    <!-- Script de secours Tailwind CDN (uniquement si votre build local ne le compile pas déjà) -->
     <script src="https://cdn.tailwindcss.com"></script>
 
-    <script>
-      // Permet à Tailwind CDN de compiler proprement les classes sombres (dark:)
-      tailwind.config = {
-        darkMode: 'class',
-        theme: {
-          extend: {
-            colors: {
-              // Teintes fidèles au design original de MastaNote
-              brand: {
-                deep: '#0a0e1a',   // Fond principal bleu nuit
-                card: '#131b31',   // Fond des cartes sombres
-                header: '#0d1321'  // En-tête et navigation
-              }
-            }
-          }
-        }
-      }
-    </script>
-
+    <!-- Configuration propre du thème de l'application -->
     <style>
       /* 
-       * Styles de base légers, propres et non-destructifs. 
-       * Empêche uniquement le flash blanc au chargement et force le mode sombre natif.
+       * Styles de base légers et non-destructifs. 
+       * Empêche uniquement le flash blanc au chargement sans casser le reste des classes.
        */
       html {
         background-color: #0a0e1a; /* Fond bleu nuit original de MastaNote */
@@ -58,12 +40,11 @@
       body {
         font-family: 'Inter', sans-serif;
         background-color: #0a0e1a;
-        color: #f1f5f9;
         margin: 0;
         padding: 0;
       }
 
-      /* Style élégant et discret pour la barre de défilement */
+      /* Style élégant et discret pour la barre de défilement de l'application */
       ::-webkit-scrollbar {
         width: 8px;
         height: 8px;
