@@ -1,35 +1,14 @@
 import React, { useState, useEffect, useRef } from 'react';
 import * as XLSX from 'xlsx';
 import {
-  BookOpen,
-  Users,
-  Plus,
-  Download,
-  Mic,
-  MicOff,
-  CheckCircle,
-  CreditCard,
-  TrendingUp,
-  Award,
-  AlertTriangle,
-  FileSpreadsheet,
-  Trash2,
-  ChevronRight,
-  ArrowLeft,
-  Settings,
-  Lock,
-  Check,
-  Camera,
-  Sparkles,
-  Image as ImageIcon,
-  RotateCcw,
-  Upload,
-  Library
+  BookOpen, Users, Plus, Download, Mic, MicOff, CheckCircle, CreditCard,
+  TrendingUp, Award, AlertTriangle, FileSpreadsheet, Trash2, ChevronRight,
+  ArrowLeft, Settings, Lock, Check, Camera, Sparkles, Image as ImageIcon,
+  RotateCcw, Upload, Library
 } from 'lucide-react';
 
 // --- CONFIGURATION ET COMPOSANTS PRINCIPAUX ---
 
-// Liste des matières standardisées pour le Primaire d'EducMaster Bénin
 const MATIERES_PRIMAIRE = [
   { id: 'dictee', label: 'Dictée', short: 'Dictée' },
   { id: 'maths', label: 'Mathématiques', short: 'Math' },
@@ -42,41 +21,25 @@ const MATIERES_PRIMAIRE = [
   { id: 'eps', label: 'EPS (Edu. Phys. & Sportive)', short: 'EPS' }
 ];
 
-// Classes disponibles au Primaire au Bénin
 const CLASSES_PRIMAIRE = ['CI', 'CP', 'CE1', 'CE2', 'CM1', 'CM2'];
 
-// --- FORMULES D'ABONNEMENT (Chariow) ---
-// Chaque formule est reliée à un produit Chariow (paiement externe hébergé par Chariow).
-// L'enseignant paie sur la page Chariow, reçoit une clé par e-mail, puis l'active ici.
 const ABONNEMENT_PLANS = [
   {
-    id: '1an',
-    label: '1 An',
-    tagline: 'Formule Découverte',
-    duree_mois: 12,
-    prix: 1500,
+    id: '1an', label: '1 An', tagline: 'Formule Découverte', duree_mois: 12, prix: 1500,
     chariowProductId: 'prd_z2kjla30',
     chariowCheckoutUrl: 'https://soudoboutik-ebook.mychariow.shop/prd_z2kjla30/checkout',
     premiumFiches: false,
     avantages: ['Export illimité EducMaster CSV', 'Saisie Vocale et Scanner IA illimités', 'Support technique par e-mail']
   },
   {
-    id: '3ans',
-    label: '3 Ans',
-    tagline: 'Formule Sérénité',
-    duree_mois: 36,
-    prix: 3000,
+    id: '3ans', label: '3 Ans', tagline: 'Formule Sérénité', duree_mois: 36, prix: 3000,
     chariowProductId: 'prd_6duiuhl1',
     chariowCheckoutUrl: 'https://soudoboutik-ebook.mychariow.shop/prd_6duiuhl1/checkout',
     premiumFiches: false,
     avantages: ['Tout de la formule 1 An', 'Support technique prioritaire', 'Mises à jour applicatives incluses']
   },
   {
-    id: '5ans',
-    label: '5 Ans VIP',
-    tagline: 'VIP Premium',
-    duree_mois: 60,
-    prix: 5000,
+    id: '5ans', label: '5 Ans VIP', tagline: 'VIP Premium', duree_mois: 60, prix: 5000,
     chariowProductId: 'prd_s877x4vl',
     chariowCheckoutUrl: 'https://soudoboutik-ebook.mychariow.shop/prd_s877x4vl/checkout',
     premiumFiches: true,
@@ -84,22 +47,10 @@ const ABONNEMENT_PLANS = [
   }
 ];
 
-// --- CONFIGURATION BACKEND SCANNER IA (Render) ---
-// Ce backend reçoit { imageBase64, mediaType, promptText }, appelle l'API Anthropic
-// côté serveur (clé API jamais exposée au client) et renvoie { content: "<texte JSON>" }.
 const SCAN_API_URL = 'https://mastanote-backend.onrender.com/api/scan';
-
-// --- CONFIGURATION BACKEND VALIDATION DE LICENCE (Render) ---
-// Ce backend reçoit { licenseKey }, interroge l'API Chariow avec la clé secrète
-// CÔTÉ SERVEUR UNIQUEMENT (jamais dans le frontend), et renvoie
-// { success, productId, expiresAt, message }.
 const LICENSE_API_URL = 'https://mastanote-backend.onrender.com/api/validate-license';
-
-// Lien vers la bibliothèque de fiches pédagogiques (réservée à la formule 5 Ans VIP).
-// Remplacez par votre vrai lien (dossier partagé, espace membre, etc.).
 const FICHES_PEDAGOGIQUES_URL = 'https://votre-espace-de-stockage-fiches.com/ressources';
 
-// Liste d'élèves par défaut pour l'exemple
 const ELEVES_INITIAL_CM2 = [
   { id: '1', matricule: '24-CM2-001', nom: 'ABALO', prenoms: 'Sena Jean' },
   { id: '2', matricule: '24-CM2-002', nom: 'BIO', prenoms: 'N\'gobi Chabi' },
@@ -111,76 +62,92 @@ const ELEVES_INITIAL_CM2 = [
   { id: '8', matricule: '24-CM2-008', nom: 'ADANZAN', prenoms: 'Sèmèvo Pierre' }
 ];
 
+// --- PERSISTANCE LOCALE (localStorage) ---
+// Clé unique versionnée : si un jour la structure des données change,
+// on peut incrémenter "v1" pour éviter de charger un format obsolète.
+const STORAGE_KEY = 'mastanote-ai-state-v1';
+
+const loadPersistedState = () => {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY);
+    if (!raw) return null;
+    return JSON.parse(raw);
+  } catch (err) {
+    console.error("Impossible de lire les données sauvegardées :", err);
+    return null;
+  }
+};
+
 export default function App() {
+  const persisted = loadPersistedState();
+
   // --- ÉTATS ---
-  const [user, setUser] = useState({
+  const [user, setUser] = useState(persisted?.user || {
     nom: 'Enseignant Bénin',
     tel: '0197000000',
-    statut_abonnement: 'demo', // demo, actif
-    planId: null, // '1an' | '3ans' | '5ans'
-    plan: null,   // libellé du plan
+    statut_abonnement: 'demo',
+    planId: null,
+    plan: null,
     expireLe: null
   });
 
-  // Gestion des classes de l'enseignant
-  const [classes, setClasses] = useState([
+  const [classes, setClasses] = useState(persisted?.classes || [
     { id: 'class-1', nom: 'CM2 Émeraude', niveau: 'CM2', eleves: ELEVES_INITIAL_CM2 }
   ]);
   const [selectedClassId, setSelectedClassId] = useState('class-1');
-  const [activeTab, setActiveTab] = useState('dashboard'); // dashboard, saisie, eleves, scan, parametres
-
-  // Matière active pour la saisie
+  const [activeTab, setActiveTab] = useState('dashboard');
   const [activeMatiere, setActiveMatiere] = useState('maths');
 
-  // Stockage des notes : { [classeId]: { [matiereId]: { [eleveId]: { note: X, perf: Y } } } }
-  const [notes, setNotes] = useState({
+  const [notes, setNotes] = useState(persisted?.notes || {
     'class-1': {
       'maths': {
-        '1': { note: 14, perf: 15 },
-        '2': { note: 8.5, perf: 10 },
-        '3': { note: 16, perf: 16 },
-        '4': { note: 10, perf: 12 },
-        '5': { note: 18, perf: 18 }
+        '1': { note: 14, perf: 15 }, '2': { note: 8.5, perf: 10 }, '3': { note: 16, perf: 16 },
+        '4': { note: 10, perf: 12 }, '5': { note: 18, perf: 18 }
       },
       'dictee': {
-        '1': { note: 12, perf: 14 },
-        '2': { note: 9, perf: 11 },
-        '3': { note: 15, perf: 15 }
+        '1': { note: 12, perf: 14 }, '2': { note: 9, perf: 11 }, '3': { note: 15, perf: 15 }
       }
     }
   });
 
-  // État de la saisie en cours (pour l'interface Mobile-First un à un)
+  // Sauvegarde automatique à chaque changement de classes/notes/user.
+  // Un debounce léger (300ms) évite d'écrire à chaque frappe de clavier.
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      try {
+        localStorage.setItem(STORAGE_KEY, JSON.stringify({ user, classes, notes }));
+      } catch (err) {
+        console.error("Impossible de sauvegarder les données :", err);
+      }
+    }, 300);
+    return () => clearTimeout(timer);
+  }, [user, classes, notes]);
+
   const [currentSaisieIndex, setCurrentSaisieIndex] = useState(0);
   const [tempNote, setTempNote] = useState('');
   const [tempPerf, setTempPerf] = useState('');
 
-  // États pour la création de classe
   const [newClassName, setNewClassName] = useState('');
   const [newClassNiveau, setNewClassNiveau] = useState('CM2');
   const [showAddClassModal, setShowAddClassModal] = useState(false);
 
-  // États pour l'ajout d'élèves
   const [newStudentNom, setNewStudentNom] = useState('');
   const [newStudentPrenoms, setNewStudentPrenoms] = useState('');
   const [newStudentMatricule, setNewStudentMatricule] = useState('');
 
-  // États pour l'IA Vocale
   const [isListening, setIsListening] = useState(false);
   const [voiceStatus, setVoiceStatus] = useState('Cliquez sur le micro pour parler');
 
-  // États pour le Paywall / activation de licence Chariow
   const [paywallModal, setPaywallModal] = useState(false);
   const [licenseKeyInput, setLicenseKeyInput] = useState('');
-  const [activationStatus, setActivationStatus] = useState('idle'); // idle, validating, success, error
+  const [activationStatus, setActivationStatus] = useState('idle');
   const [activationMessage, setActivationMessage] = useState('');
   const [notif, setNotif] = useState(null);
-  const [updateInfo, setUpdateInfo] = useState(null); // { activateUpdate: () => void } | null
+  const [updateInfo, setUpdateInfo] = useState(null);
 
-  // États pour le Scanner IA de feuilles de notes
   const [scanMatiere, setScanMatiere] = useState('maths');
-  const [scanImage, setScanImage] = useState(null); // { base64, mediaType, previewUrl }
-  const [scanStatus, setScanStatus] = useState('idle'); // idle, analyzing, review, error
+  const [scanImage, setScanImage] = useState(null);
+  const [scanStatus, setScanStatus] = useState('idle');
   const [scanResults, setScanResults] = useState([]);
   const [scanErrorMsg, setScanErrorMsg] = useState('');
   const [scanProgressMsg, setScanProgressMsg] = useState('');
@@ -192,17 +159,12 @@ export default function App() {
 
   const isPremiumPlan = user.statut_abonnement === 'actif' && user.planId === '5ans';
 
-  // --- ALERTE NOTIFICATION ---
   const triggerNotif = (message, type = 'success') => {
     setNotif({ message, type });
     setTimeout(() => setNotif(null), 4000);
   };
 
   // --- DÉTECTION D'UNE NOUVELLE VERSION DE L'APPLICATION (PWA) ---
-  // Ne dépend que d'API navigateur standard (CustomEvent) pour rester compatible
-  // avec tout environnement d'aperçu. Dans votre vrai projet Vite, main.tsx
-  // utilise le vrai plugin PWA (virtual:pwa-register) et relaie l'information
-  // ici via ce même événement 'mastanote-update-available' (voir instructions).
   useEffect(() => {
     const handleUpdateAvailable = (e) => {
       setUpdateInfo({ activateUpdate: e.detail.activateUpdate });
@@ -226,43 +188,32 @@ export default function App() {
       setIsListening(true);
       setVoiceStatus("Écoute active... Dites par exemple : 'Quatorze et douze'");
     };
-
     rec.onresult = (event) => {
       const text = event.results[0][0].transcript;
       processVoiceCommand(text);
     };
-
     rec.onerror = () => {
       setVoiceStatus("Une erreur est survenue lors de l'écoute.");
       setIsListening(false);
     };
-
-    rec.onend = () => {
-      setIsListening(false);
-    };
+    rec.onend = () => setIsListening(false);
 
     recognitionRef.current = rec;
 
     return () => {
-      rec.onstart = null;
-      rec.onresult = null;
-      rec.onerror = null;
-      rec.onend = null;
+      rec.onstart = null; rec.onresult = null; rec.onerror = null; rec.onend = null;
       try { rec.stop(); } catch (e) { /* déjà arrêté */ }
     };
   }, [selectedClassId, activeMatiere, currentSaisieIndex]);
 
-  // --- ANALYSE DE LA DICTÉE IA ---
   const processVoiceCommand = (text) => {
     setVoiceStatus(`Reconnu : "${text}"`);
     const cleanText = text.toLowerCase().trim();
-
     const numberPattern = /([0-9]+[.,]?[0-9]*)/g;
     const matches = cleanText.match(numberPattern);
 
     if (matches && matches.length >= 1) {
       const noteLue = parseFloat(matches[0].replace(',', '.'));
-
       if (noteLue >= 0 && noteLue <= 20) {
         setTempNote(noteLue.toString());
         if (matches[1]) {
@@ -289,15 +240,10 @@ export default function App() {
       triggerNotif("La reconnaissance vocale n'est pas supportée sur ce navigateur.", 'error');
       return;
     }
-
-    if (isListening) {
-      recognitionRef.current.stop();
-    } else {
-      recognitionRef.current.start();
-    }
+    if (isListening) recognitionRef.current.stop();
+    else recognitionRef.current.start();
   };
 
-  // --- LOGIQUE SAISIE ET NAVIGATION ÉLÈVES ---
   const activeClass = classes.find(c => c.id === selectedClassId) || classes[0];
   const activeEleve = activeClass?.eleves[currentSaisieIndex];
 
@@ -312,7 +258,6 @@ export default function App() {
 
   const handleSaveCurrentAndNext = () => {
     if (!activeClass || !activeEleve) return;
-
     const n = parseFloat(tempNote);
     const p = parseFloat(tempPerf);
 
@@ -325,8 +270,6 @@ export default function App() {
       return;
     }
 
-    // Mise à jour immuable : on ne modifie jamais un objet existant du state en place,
-    // on reconstruit systématiquement des copies à chaque niveau.
     setNotes(prev => {
       const classData = prev[selectedClassId] || {};
       const matiereData = classData[activeMatiere] || {};
@@ -353,22 +296,14 @@ export default function App() {
   };
 
   const handlePrev = () => {
-    if (currentSaisieIndex > 0) {
-      setCurrentSaisieIndex(prev => prev - 1);
-    }
+    if (currentSaisieIndex > 0) setCurrentSaisieIndex(prev => prev - 1);
   };
 
-  // --- CREATION / SUPPRESSION DE CLASSE ---
   const handleCreateClass = (e) => {
     if (e && e.preventDefault) e.preventDefault();
     if (!newClassName.trim()) return;
 
-    const newClass = {
-      id: `class-${Date.now()}`,
-      nom: newClassName,
-      niveau: newClassNiveau,
-      eleves: []
-    };
+    const newClass = { id: `class-${Date.now()}`, nom: newClassName, niveau: newClassNiveau, eleves: [] };
 
     setClasses(prev => [...prev, newClass]);
     setSelectedClassId(newClass.id);
@@ -384,9 +319,7 @@ export default function App() {
       return;
     }
     if (!activeClass) return;
-    if (!confirm(`Voulez-vous vraiment supprimer la classe "${activeClass.nom}" et toutes ses notes ? Cette action est irréversible.`)) {
-      return;
-    }
+    if (!confirm(`Voulez-vous vraiment supprimer la classe "${activeClass.nom}" et toutes ses notes ? Cette action est irréversible.`)) return;
 
     const remaining = classes.filter(c => c.id !== activeClass.id);
     setClasses(remaining);
@@ -400,7 +333,6 @@ export default function App() {
     triggerNotif(`Classe "${activeClass.nom}" supprimée.`);
   };
 
-  // Génère un matricule unique (non déjà utilisé dans la classe active) si aucun n'est fourni
   const generateUniqueMatricule = () => {
     const existing = new Set(activeClass.eleves.map(el => el.matricule));
     let candidate;
@@ -420,23 +352,12 @@ export default function App() {
     }
 
     const matriculeGenere = newStudentMatricule.trim() || generateUniqueMatricule();
-
     const newStudent = {
-      id: `student-${Date.now()}`,
-      matricule: matriculeGenere,
-      nom: newStudentNom.toUpperCase(),
-      prenoms: newStudentPrenoms
+      id: `student-${Date.now()}`, matricule: matriculeGenere,
+      nom: newStudentNom.toUpperCase(), prenoms: newStudentPrenoms
     };
 
-    setClasses(prev => prev.map(c => {
-      if (c.id === selectedClassId) {
-        return {
-          ...c,
-          eleves: [...c.eleves, newStudent]
-        };
-      }
-      return c;
-    }));
+    setClasses(prev => prev.map(c => c.id === selectedClassId ? { ...c, eleves: [...c.eleves, newStudent] } : c));
 
     setNewStudentNom('');
     setNewStudentPrenoms('');
@@ -445,47 +366,32 @@ export default function App() {
   };
 
   const handleDeleteStudent = (studentId) => {
-    setClasses(prev => prev.map(c => {
-      if (c.id === selectedClassId) {
-        return {
-          ...c,
-          eleves: c.eleves.filter(e => e.id !== studentId)
-        };
-      }
-      return c;
-    }));
+    setClasses(prev => prev.map(c => c.id === selectedClassId
+      ? { ...c, eleves: c.eleves.filter(e => e.id !== studentId) }
+      : c
+    ));
     triggerNotif("Élève retiré de la classe.");
   };
 
-  // --- IMPORTATION RAPIDE DU CANEVAS EDUCMASTER (CSV / TXT / XLSX / XLS) ---
-  // Structure attendue (avec en-tête à ignorer) : Matricule | Nom | Prénom
-  // Les colonnes sont détectées par le NOM de l'en-tête (accent/casse insensible),
-  // avec repli sur l'ordre 1=Matricule, 2=Nom, 3=Prénom si la détection échoue.
-
   const normalizeHeader = (s) => (s ?? '').toString().toLowerCase()
-    .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
-    .trim();
+    .normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim();
 
   const detectColumns = (headerRow) => {
     const normalized = (headerRow || []).map(normalizeHeader);
-
     const idxPrenom = normalized.findIndex(h => h.includes('prenom'));
     const idxMatricule = normalized.findIndex(h => h.includes('matricule'));
     const idxNom = normalized.findIndex((h, i) =>
       i !== idxPrenom && (h === 'nom' || h.startsWith('nom ') || h.includes('nom de famille') || h === 'noms')
     );
-
     const detectionComplete = idxMatricule !== -1 && idxNom !== -1 && idxPrenom !== -1;
-
     return detectionComplete
       ? { matricule: idxMatricule, nom: idxNom, prenoms: idxPrenom }
-      : { matricule: 0, nom: 1, prenoms: 2 }; // repli sur l'ordre standard EducMaster
+      : { matricule: 0, nom: 1, prenoms: 2 };
   };
 
   const rowsFromCsvText = (rawText) => {
     const lines = rawText.split(/\r\n|\n|\r/).filter(l => l.trim() !== '');
     if (lines.length < 2) return [];
-
     const headerLine = lines[0];
     const counts = {
       ',': (headerLine.match(/,/g) || []).length,
@@ -493,17 +399,12 @@ export default function App() {
       '\t': (headerLine.match(/\t/g) || []).length
     };
     const separator = Object.entries(counts).sort((a, b) => b[1] - a[1])[0][0];
-
     const cleanCell = (cell) => cell.trim().replace(/^"+|"+$/g, '').trim();
-
     return lines.map(line => line.split(separator).map(cleanCell));
   };
 
   const rowsFromWorkbook = (arrayBuffer) => {
     const workbook = XLSX.read(arrayBuffer, { type: 'array' });
-
-    // Cherche la feuille dont l'en-tête contient "matricule" (au cas où la première
-    // feuille du classeur serait une page d'instructions plutôt que le listing réel).
     let chosenSheetName = workbook.SheetNames[0];
     for (const sheetName of workbook.SheetNames) {
       const preview = XLSX.utils.sheet_to_json(workbook.Sheets[sheetName], { header: 1, raw: false, defval: '' });
@@ -513,7 +414,6 @@ export default function App() {
         break;
       }
     }
-
     const sheet = workbook.Sheets[chosenSheetName];
     return XLSX.utils.sheet_to_json(sheet, { header: 1, raw: false, defval: '' });
   };
@@ -521,22 +421,16 @@ export default function App() {
   const studentsFromRows = (rows) => {
     if (!rows || rows.length < 2) return [];
     const cols = detectColumns(rows[0]);
-
     const students = [];
     rows.slice(1).forEach((row) => {
       if (!row || row.length === 0) return;
-
       const matricule = (row[cols.matricule] ?? '').toString().trim();
       const nom = (row[cols.nom] ?? '').toString().trim();
       const prenoms = (row[cols.prenoms] ?? '').toString().trim();
-
       if (!matricule || !nom) return;
-
       students.push({
         id: `import-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
-        matricule,
-        nom: nom.toUpperCase(),
-        prenoms
+        matricule, nom: nom.toUpperCase(), prenoms
       });
     });
     return students;
@@ -574,8 +468,7 @@ export default function App() {
 
   const handleImportEducMasterFile = (e) => {
     const file = e.target.files?.[0];
-    e.target.value = ''; // permet de réimporter le même fichier ensuite
-
+    e.target.value = '';
     if (!file) return;
 
     const isExcel = /\.(xlsx|xls)$/i.test(file.name);
@@ -587,17 +480,13 @@ export default function App() {
     }
 
     const reader = new FileReader();
-
-    reader.onerror = () => {
-      triggerNotif("Impossible de lire ce fichier.", 'error');
-    };
+    reader.onerror = () => triggerNotif("Impossible de lire ce fichier.", 'error');
 
     if (isExcel) {
       reader.onload = () => {
         try {
           const rows = rowsFromWorkbook(reader.result);
-          const imported = studentsFromRows(rows);
-          applyImportedStudents(imported);
+          applyImportedStudents(studentsFromRows(rows));
         } catch (err) {
           console.error(err);
           triggerNotif("Erreur lors de la lecture du fichier Excel. Vérifiez qu'il s'agit bien d'un export EducMaster valide.", 'error');
@@ -608,9 +497,7 @@ export default function App() {
       reader.onload = () => {
         try {
           const text = typeof reader.result === 'string' ? reader.result : '';
-          const rows = rowsFromCsvText(text);
-          const imported = studentsFromRows(rows);
-          applyImportedStudents(imported);
+          applyImportedStudents(studentsFromRows(rowsFromCsvText(text)));
         } catch (err) {
           console.error(err);
           triggerNotif("Erreur lors de la lecture du fichier. Vérifiez qu'il s'agit bien d'un export EducMaster valide.", 'error');
@@ -620,35 +507,19 @@ export default function App() {
     }
   };
 
-  // --- ALGORITHMES ET CALCUL DES STATISTIQUES ---
   const getClassStats = () => {
     if (!activeClass || activeClass.eleves.length === 0) return { moyenne: 0, taux: 0, top: '-', flop: '-' };
-
     const matNotes = notes[selectedClassId]?.[activeMatiere] || {};
-    let total = 0;
-    let count = 0;
-    let admis = 0;
-    let maxNote = -1;
-    let minNote = 21;
-    let topStudent = '-';
-    let flopStudent = '-';
+    let total = 0, count = 0, admis = 0, maxNote = -1, minNote = 21, topStudent = '-', flopStudent = '-';
 
     activeClass.eleves.forEach(el => {
       const studentNoteData = matNotes[el.id];
       if (studentNoteData && studentNoteData.note !== undefined) {
         const n = studentNoteData.note;
-        total += n;
-        count++;
+        total += n; count++;
         if (n >= 10) admis++;
-
-        if (n > maxNote) {
-          maxNote = n;
-          topStudent = `${el.nom} ${el.prenoms}`;
-        }
-        if (n < minNote) {
-          minNote = n;
-          flopStudent = `${el.nom} ${el.prenoms}`;
-        }
+        if (n > maxNote) { maxNote = n; topStudent = `${el.nom} ${el.prenoms}`; }
+        if (n < minNote) { minNote = n; flopStudent = `${el.nom} ${el.prenoms}`; }
       }
     });
 
@@ -657,49 +528,35 @@ export default function App() {
       taux: count > 0 ? Math.round((admis / count) * 100) : 0,
       top: maxNote !== -1 ? `${topStudent} (${maxNote}/20)` : '-',
       flop: minNote !== 21 ? `${flopStudent} (${minNote}/20)` : '-',
-      saisis: count,
-      totalEleves: activeClass.eleves.length
+      saisis: count, totalEleves: activeClass.eleves.length
     };
   };
 
   const stats = getClassStats();
 
-  // Échappe correctement une valeur pour l'insérer dans une cellule CSV
-  // (double les guillemets internes pour éviter de casser le fichier)
   const escapeCsv = (val) => `"${String(val ?? '').replace(/"/g, '""')}"`;
 
-  // --- EXPORTATEUR DE CLASSE VERS CANVAS EDUCMASTER ---
   const exportToEducMaster = () => {
     if (user.statut_abonnement === 'demo') {
       setPaywallModal(true);
       return;
     }
-
     if (!activeClass || activeClass.eleves.length === 0) {
       triggerNotif("Aucun élève dans cette classe à exporter.", 'error');
       return;
     }
 
     let csvContent = "Matricule,Nom,Prénoms";
-    MATIERES_PRIMAIRE.forEach(m => {
-      csvContent += `,${m.label},`;
-    });
-    csvContent += "\n";
-
-    csvContent += ",,";
-    MATIERES_PRIMAIRE.forEach(() => {
-      csvContent += ",Note obtenue,Note perfectionnement";
-    });
+    MATIERES_PRIMAIRE.forEach(m => { csvContent += `,${m.label},`; });
+    csvContent += "\n,,";
+    MATIERES_PRIMAIRE.forEach(() => { csvContent += ",Note obtenue,Note perfectionnement"; });
     csvContent += "\n";
 
     activeClass.eleves.forEach(el => {
       let row = `${escapeCsv(el.matricule)},${escapeCsv(el.nom)},${escapeCsv(el.prenoms)}`;
-
       MATIERES_PRIMAIRE.forEach(m => {
         const studentNote = notes[selectedClassId]?.[m.id]?.[el.id] || {};
-        const nObtenu = studentNote.note !== undefined ? studentNote.note : "";
-        const nPerf = studentNote.perf !== undefined ? studentNote.perf : "";
-        row += `,${nObtenu},${nPerf}`;
+        row += `,${studentNote.note !== undefined ? studentNote.note : ""},${studentNote.perf !== undefined ? studentNote.perf : ""}`;
       });
       csvContent += row + "\n";
     });
@@ -716,7 +573,6 @@ export default function App() {
     triggerNotif("Fichier d'importation EducMaster généré avec succès !", 'success');
   };
 
-  // --- ACTIVATION DE LICENCE CHARIOW (via backend sécurisé) ---
   const computeExpirationLabel = (isoDateString, dureeMoisFallback) => {
     let d = null;
     if (isoDateString) {
@@ -782,7 +638,6 @@ export default function App() {
     }
   };
 
-  // --- SCANNER IA DE FEUILLES DE NOTES ---
   const resetScan = () => {
     setScanImage(null);
     setScanStatus('idle');
@@ -792,9 +647,8 @@ export default function App() {
 
   const handleScanFileSelected = (e) => {
     const file = e.target.files?.[0];
-    e.target.value = ''; // permet de re-sélectionner la même image ensuite
+    e.target.value = '';
     if (!file) return;
-
     if (!file.type.startsWith('image/')) {
       triggerNotif("Veuillez sélectionner un fichier image.", 'error');
       return;
@@ -802,16 +656,14 @@ export default function App() {
 
     const reader = new FileReader();
     reader.onload = () => {
-      const result = reader.result; // data:image/xxx;base64,AAAA...
+      const result = reader.result;
       const base64 = result.split(',')[1];
       setScanImage({ base64, mediaType: file.type, previewUrl: result });
       setScanStatus('idle');
       setScanResults([]);
       setScanErrorMsg('');
     };
-    reader.onerror = () => {
-      triggerNotif("Impossible de lire cette image.", 'error');
-    };
+    reader.onerror = () => triggerNotif("Impossible de lire cette image.", 'error');
     reader.readAsDataURL(file);
   };
 
@@ -821,22 +673,15 @@ export default function App() {
     setScanErrorMsg('');
     setScanProgressMsg("Analyse en cours...");
 
-    // Le backend Render (offre gratuite) peut être en veille après une période
-    // d'inactivité et mettre jusqu'à 60s à redémarrer. On prévient l'enseignant
-    // plutôt que de le laisser croire que l'appli est bloquée.
     const coldStartTimer = setTimeout(() => {
       setScanProgressMsg("Le serveur se réveille peut-être (jusqu'à 60 secondes après une période d'inactivité)... Merci de patienter.");
     }, 5000);
 
-    // On borne l'attente à 90s pour éviter un blocage indéfini si le serveur
-    // ne répond vraiment pas.
     const controller = new AbortController();
     const abortTimer = setTimeout(() => controller.abort(), 90000);
 
     try {
-      const roster = activeClass.eleves
-        .map(el => `${el.matricule} | ${el.nom} ${el.prenoms}`)
-        .join('\n');
+      const roster = activeClass.eleves.map(el => `${el.matricule} | ${el.nom} ${el.prenoms}`).join('\n');
       const matiereLabel = MATIERES_PRIMAIRE.find(m => m.id === scanMatiere)?.label || scanMatiere;
 
       const promptText = `Tu analyses la photo d'une feuille de notes (manuscrite ou imprimée) d'une classe de primaire au Bénin, pour la matière "${matiereLabel}".
@@ -848,15 +693,10 @@ Réponds UNIQUEMENT avec un tableau JSON valide, sans aucun texte autour, sans b
 [{"matricule":"24-CM2-001","note":14,"perf":15}]
 Utilise null pour perf si elle n'est pas visible sur la feuille. Si tu ne peux pas identifier le matricule d'une ligne avec certitude, ignore cette ligne.`;
 
-      // Appel à votre backend Render (proxy sécurisé vers l'API Anthropic).
       const response = await fetch(SCAN_API_URL, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          imageBase64: scanImage.base64,
-          mediaType: scanImage.mediaType,
-          promptText
-        }),
+        body: JSON.stringify({ imageBase64: scanImage.base64, mediaType: scanImage.mediaType, promptText }),
         signal: controller.signal
       });
 
@@ -877,9 +717,7 @@ Utilise null pour perf si elle n'est pas visible sur la feuille. Si tu ne peux p
         const hasNote = found && found.note !== null && found.note !== undefined && found.note !== '';
         const hasPerf = found && found.perf !== null && found.perf !== undefined && found.perf !== '';
         return {
-          studentId: el.id,
-          matricule: el.matricule,
-          nom: `${el.nom} ${el.prenoms}`,
+          studentId: el.id, matricule: el.matricule, nom: `${el.nom} ${el.prenoms}`,
           note: hasNote ? found.note.toString() : '',
           perf: hasPerf ? found.perf.toString() : '',
           include: !!hasNote
@@ -965,7 +803,6 @@ Utilise null pour perf si elle n'est pas visible sur la feuille. Si tu ne peux p
   return (
     <div className="min-h-screen bg-slate-900 text-slate-100 flex flex-col font-sans selection:bg-indigo-500 selection:text-white">
 
-      {/* --- BANNIÈRE MISE À JOUR DISPONIBLE (PWA) --- */}
       {updateInfo && (
         <div className="fixed bottom-4 left-1/2 transform -translate-x-1/2 z-50 w-[92vw] max-w-md bg-slate-950 border border-indigo-500/40 shadow-2xl rounded-2xl px-4 py-3.5 flex items-center gap-3">
           <div className="bg-indigo-500/10 border border-indigo-500/20 text-indigo-400 p-2 rounded-xl shrink-0">
@@ -976,25 +813,17 @@ Utilise null pour perf si elle n'est pas visible sur la feuille. Si tu ne peux p
             <p className="text-[11px] text-slate-400">Rechargez pour profiter des dernières améliorations.</p>
           </div>
           <button
-            onClick={() => {
-              updateInfo.activateUpdate();
-              setUpdateInfo(null);
-            }}
+            onClick={() => { updateInfo.activateUpdate(); setUpdateInfo(null); }}
             className="bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold px-3.5 py-2 rounded-xl shrink-0 transition-colors"
-          >
-            Recharger
-          </button>
+          >Recharger</button>
           <button
             onClick={() => setUpdateInfo(null)}
             className="text-slate-500 hover:text-slate-300 text-lg font-bold px-1 shrink-0"
             title="Plus tard"
-          >
-            ✕
-          </button>
+          >✕</button>
         </div>
       )}
 
-      {/* --- BANDEAU D'ALERTE DE NOTIFICATION --- */}
       {notif && (
         <div className={`fixed top-4 left-1/2 transform -translate-x-1/2 z-50 px-4 py-3 rounded-xl shadow-2xl flex items-center gap-2 border text-sm transition-all duration-300 animate-bounce max-w-[90vw] ${
           notif.type === 'success' ? 'bg-emerald-950 border-emerald-500 text-emerald-200' : 'bg-rose-950 border-rose-500 text-rose-200'
@@ -1004,7 +833,6 @@ Utilise null pour perf si elle n'est pas visible sur la feuille. Si tu ne peux p
         </div>
       )}
 
-      {/* --- EN-TÊTE PRINCIPALE --- */}
       <header className="bg-slate-950 border-b border-slate-800 sticky top-0 z-40 px-4 py-3 shadow-lg">
         <div className="max-w-6xl mx-auto flex items-center justify-between">
           <div className="flex items-center gap-3">
@@ -1062,17 +890,13 @@ Utilise null pour perf si elle n'est pas visible sur la feuille. Si tu ne peux p
         </div>
       </header>
 
-      {/* --- SÉLECTEUR DE CLASSE MOBILE --- */}
       <section className="bg-slate-950/50 border-b border-slate-800/80 px-4 py-2.5">
         <div className="max-w-6xl mx-auto flex items-center justify-between gap-2">
           <div className="flex items-center gap-2 w-full max-w-xs">
             <span className="text-xs font-semibold text-slate-400 uppercase tracking-wider hidden sm:inline">Classe :</span>
             <select
               value={selectedClassId}
-              onChange={(e) => {
-                setSelectedClassId(e.target.value);
-                setCurrentSaisieIndex(0);
-              }}
+              onChange={(e) => { setSelectedClassId(e.target.value); setCurrentSaisieIndex(0); }}
               className="bg-slate-900 border border-slate-800 text-slate-200 text-sm rounded-xl px-3 py-1.5 focus:outline-none focus:border-indigo-500 w-full"
             >
               {classes.map(c => (
@@ -1101,10 +925,8 @@ Utilise null pour perf si elle n'est pas visible sur la feuille. Si tu ne peux p
         </div>
       </section>
 
-      {/* --- CORPS PRINCIPAL --- */}
       <main className="flex-1 max-w-6xl w-full mx-auto p-4 flex flex-col gap-6">
 
-        {/* --- MODAL AJOUT CLASSE --- */}
         {showAddClassModal && (
           <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-sm flex items-center justify-center p-4 z-50">
             <div className="bg-slate-900 border border-slate-800 rounded-3xl p-6 w-full max-w-md shadow-2xl">
@@ -1116,9 +938,7 @@ Utilise null pour perf si elle n'est pas visible sur la feuille. Si tu ne peux p
                 <div>
                   <label className="block text-xs font-semibold text-slate-400 mb-1.5">Nom de la classe (ex: CM2 Diamant)</label>
                   <input
-                    type="text"
-                    required
-                    placeholder="Saisissez le nom"
+                    type="text" required placeholder="Saisissez le nom"
                     value={newClassName}
                     onChange={(e) => setNewClassName(e.target.value)}
                     className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3.5 py-2.5 text-slate-200 text-sm focus:outline-none focus:border-indigo-500"
@@ -1131,42 +951,25 @@ Utilise null pour perf si elle n'est pas visible sur la feuille. Si tu ne peux p
                     onChange={(e) => setNewClassNiveau(e.target.value)}
                     className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3.5 py-2.5 text-slate-200 text-sm focus:outline-none focus:border-indigo-500"
                   >
-                    {CLASSES_PRIMAIRE.map(lvl => (
-                      <option key={lvl} value={lvl}>{lvl}</option>
-                    ))}
+                    {CLASSES_PRIMAIRE.map(lvl => (<option key={lvl} value={lvl}>{lvl}</option>))}
                   </select>
                 </div>
                 <div className="flex gap-2 justify-end pt-2">
-                  <button
-                    type="button"
-                    onClick={() => setShowAddClassModal(false)}
-                    className="px-4 py-2 text-sm text-slate-400 hover:text-white"
-                  >
-                    Annuler
-                  </button>
-                  <button
-                    type="button"
-                    onClick={handleCreateClass}
-                    className="bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-sm px-5 py-2 rounded-xl transition-colors"
-                  >
-                    Créer la classe
-                  </button>
+                  <button type="button" onClick={() => setShowAddClassModal(false)} className="px-4 py-2 text-sm text-slate-400 hover:text-white">Annuler</button>
+                  <button type="button" onClick={handleCreateClass} className="bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-sm px-5 py-2 rounded-xl transition-colors">Créer la classe</button>
                 </div>
               </div>
             </div>
           </div>
         )}
 
-        {/* --- MODAL PAYWALL / ABONNEMENT CHARIOW --- */}
         {paywallModal && (
           <div className="fixed inset-0 bg-slate-950/90 backdrop-blur-md flex items-center justify-center p-4 z-50 overflow-y-auto">
             <div className="bg-slate-900 border border-slate-800 rounded-3xl p-6 w-full max-w-4xl shadow-2xl relative my-8">
               <button
                 onClick={() => { setPaywallModal(false); setActivationStatus('idle'); setActivationMessage(''); }}
                 className="absolute top-4 right-4 text-slate-400 hover:text-white text-lg font-bold"
-              >
-                ✕
-              </button>
+              >✕</button>
 
               <div className="text-center mb-6">
                 <div className="inline-flex bg-amber-500/10 text-amber-500 border border-amber-500/20 p-3 rounded-2xl mb-3">
@@ -1176,21 +979,16 @@ Utilise null pour perf si elle n'est pas visible sur la feuille. Si tu ne peux p
                 <p className="text-sm text-slate-400 mt-1">Choisissez votre formule ci-dessous. Le paiement se fait sur la page sécurisée Chariow.</p>
               </div>
 
-              {/* CARTES DES 3 FORMULES */}
               <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
                 {ABONNEMENT_PLANS.map(plan => (
                   <div
                     key={plan.id}
                     className={`relative rounded-2xl p-5 border flex flex-col ${
-                      plan.premiumFiches
-                        ? 'bg-amber-500/5 border-amber-500/40 ring-1 ring-amber-500/20'
-                        : 'bg-slate-950/60 border-slate-800'
+                      plan.premiumFiches ? 'bg-amber-500/5 border-amber-500/40 ring-1 ring-amber-500/20' : 'bg-slate-950/60 border-slate-800'
                     }`}
                   >
                     {plan.premiumFiches && (
-                      <span className="absolute -top-3 right-4 bg-amber-500 text-slate-950 text-[10px] font-black uppercase px-2.5 py-1 rounded-full">
-                        Meilleur choix
-                      </span>
+                      <span className="absolute -top-3 right-4 bg-amber-500 text-slate-950 text-[10px] font-black uppercase px-2.5 py-1 rounded-full">Meilleur choix</span>
                     )}
                     <span className="text-xs font-bold text-slate-400 uppercase tracking-wider">{plan.tagline}</span>
                     <p className={`text-2xl font-black mt-1.5 ${plan.premiumFiches ? 'text-amber-400' : 'text-white'}`}>
@@ -1206,30 +1004,22 @@ Utilise null pour perf si elle n'est pas visible sur la feuille. Si tu ne peux p
                       ))}
                     </ul>
                     <a
-                      href={plan.chariowCheckoutUrl}
-                      target="_blank"
-                      rel="noopener noreferrer"
+                      href={plan.chariowCheckoutUrl} target="_blank" rel="noopener noreferrer"
                       className={`text-center text-sm font-bold py-2.5 rounded-xl transition-all ${
-                        plan.premiumFiches
-                          ? 'bg-gradient-to-r from-amber-500 to-orange-500 text-slate-950 hover:opacity-95'
-                          : 'bg-indigo-600 hover:bg-indigo-700 text-white'
+                        plan.premiumFiches ? 'bg-gradient-to-r from-amber-500 to-orange-500 text-slate-950 hover:opacity-95' : 'bg-indigo-600 hover:bg-indigo-700 text-white'
                       }`}
-                    >
-                      S'abonner ({plan.label})
-                    </a>
+                    >S'abonner ({plan.label})</a>
                   </div>
                 ))}
               </div>
 
-              {/* ACTIVATION DE LICENCE (après paiement Chariow) */}
               <div className="bg-slate-950/60 rounded-2xl p-5 border border-slate-800/80 max-w-lg mx-auto">
                 <h4 className="font-bold text-white text-sm mb-1">Vous avez déjà payé sur Chariow ?</h4>
                 <p className="text-xs text-slate-400 mb-4">Saisissez la clé de licence reçue par e-mail après votre paiement pour l'activer ici.</p>
 
                 <div className="flex gap-2">
                   <input
-                    type="text"
-                    placeholder="Ex : XXXX-XXXX-XXXX-XXXX"
+                    type="text" placeholder="Ex : ABC-123-XYZ-789"
                     value={licenseKeyInput}
                     onChange={(e) => setLicenseKeyInput(e.target.value)}
                     disabled={activationStatus === 'validating'}
@@ -1251,16 +1041,13 @@ Utilise null pour perf si elle n'est pas visible sur la feuille. Si tu ne peux p
                   <p className={`text-xs font-medium mt-2.5 ${
                     activationStatus === 'success' ? 'text-emerald-400' :
                     activationStatus === 'error' ? 'text-rose-400' : 'text-slate-400'
-                  }`}>
-                    {activationMessage}
-                  </p>
+                  }`}>{activationMessage}</p>
                 )}
               </div>
             </div>
           </div>
         )}
 
-        {/* --- NAVIGATION PAR ONGLETS --- */}
         <div className="flex border-b border-slate-800/80 overflow-x-auto whitespace-nowrap scrollbar-hide gap-1">
           <button
             onClick={() => setActiveTab('dashboard')}
@@ -1273,12 +1060,8 @@ Utilise null pour perf si elle n'est pas visible sur la feuille. Si tu ne peux p
           </button>
           <button
             onClick={() => {
-              if (activeClass?.eleves.length > 0) {
-                setActiveTab('saisie');
-              } else {
-                triggerNotif("Veuillez d'abord ajouter des élèves à votre classe.", "error");
-                setActiveTab('eleves');
-              }
+              if (activeClass?.eleves.length > 0) setActiveTab('saisie');
+              else { triggerNotif("Veuillez d'abord ajouter des élèves à votre classe.", "error"); setActiveTab('eleves'); }
             }}
             className={`px-4 py-3 text-xs sm:text-sm font-semibold border-b-2 flex items-center gap-2 transition-all ${
               activeTab === 'saisie' ? 'border-indigo-500 text-white bg-slate-900/40' : 'border-transparent text-slate-400 hover:text-slate-200'
@@ -1289,12 +1072,8 @@ Utilise null pour perf si elle n'est pas visible sur la feuille. Si tu ne peux p
           </button>
           <button
             onClick={() => {
-              if (activeClass?.eleves.length > 0) {
-                setActiveTab('scan');
-              } else {
-                triggerNotif("Veuillez d'abord ajouter des élèves à votre classe.", "error");
-                setActiveTab('eleves');
-              }
+              if (activeClass?.eleves.length > 0) setActiveTab('scan');
+              else { triggerNotif("Veuillez d'abord ajouter des élèves à votre classe.", "error"); setActiveTab('eleves'); }
             }}
             className={`px-4 py-3 text-xs sm:text-sm font-semibold border-b-2 flex items-center gap-2 transition-all ${
               activeTab === 'scan' ? 'border-indigo-500 text-white bg-slate-900/40' : 'border-transparent text-slate-400 hover:text-slate-200'
@@ -1314,42 +1093,27 @@ Utilise null pour perf si elle n'est pas visible sur la feuille. Si tu ne peux p
           </button>
         </div>
 
-        {/* --- CONTENU DE L'ONGLET TABLEAU DE BORD --- */}
         {activeTab === 'dashboard' && (
           <div className="space-y-6">
-
             <div className="bg-gradient-to-br from-indigo-950 via-slate-900 to-slate-950 border border-indigo-500/20 rounded-3xl p-6 relative overflow-hidden shadow-xl">
               <div className="absolute top-0 right-0 p-4 opacity-5 pointer-events-none">
                 <FileSpreadsheet className="w-64 h-64" />
               </div>
-
               <div className="flex flex-col md:flex-row md:items-center justify-between gap-6 relative z-10">
                 <div>
                   <h2 className="font-extrabold text-xl sm:text-2xl text-white">Classe active : {activeClass?.nom}</h2>
                   <p className="text-slate-400 text-sm mt-1">Saisissez les notes puis générez le fichier compatible avec le portail officiel EducMaster Bénin.</p>
-
                   <div className="flex flex-wrap gap-2 mt-4">
-                    <span className="bg-slate-800 text-slate-300 text-xs px-3 py-1.5 rounded-xl font-medium">
-                      {activeClass?.eleves.length || 0} Élèves
-                    </span>
-                    <span className="bg-slate-800 text-slate-300 text-xs px-3 py-1.5 rounded-xl font-medium">
-                      Niveau {activeClass?.niveau}
-                    </span>
+                    <span className="bg-slate-800 text-slate-300 text-xs px-3 py-1.5 rounded-xl font-medium">{activeClass?.eleves.length || 0} Élèves</span>
+                    <span className="bg-slate-800 text-slate-300 text-xs px-3 py-1.5 rounded-xl font-medium">Niveau {activeClass?.niveau}</span>
                   </div>
                 </div>
-
                 <div className="flex flex-col sm:flex-row gap-3">
-                  <button
-                    onClick={() => setActiveTab('scan')}
-                    className="bg-slate-800 hover:bg-slate-700 text-white font-bold text-sm px-5 py-3 rounded-xl flex items-center justify-center gap-2 transition-all"
-                  >
+                  <button onClick={() => setActiveTab('scan')} className="bg-slate-800 hover:bg-slate-700 text-white font-bold text-sm px-5 py-3 rounded-xl flex items-center justify-center gap-2 transition-all">
                     <Camera className="w-4 h-4" />
                     Scanner une feuille
                   </button>
-                  <button
-                    onClick={exportToEducMaster}
-                    className="bg-gradient-to-r from-emerald-500 to-teal-500 text-slate-950 font-black text-sm px-5 py-3 rounded-xl flex items-center justify-center gap-2 transition-all shadow-lg shadow-emerald-500/10"
-                  >
+                  <button onClick={exportToEducMaster} className="bg-gradient-to-r from-emerald-500 to-teal-500 text-slate-950 font-black text-sm px-5 py-3 rounded-xl flex items-center justify-center gap-2 transition-all shadow-lg shadow-emerald-500/10">
                     <Download className="w-4 h-4" />
                     Exporter EducMaster (.csv)
                   </button>
@@ -1362,55 +1126,39 @@ Utilise null pour perf si elle n'est pas visible sur la feuille. Si tu ne peux p
               <div className="flex gap-2 overflow-x-auto pb-2 scrollbar-hide">
                 {MATIERES_PRIMAIRE.map(m => (
                   <button
-                    key={m.id}
-                    onClick={() => setActiveMatiere(m.id)}
+                    key={m.id} onClick={() => setActiveMatiere(m.id)}
                     className={`px-3 py-2 text-xs font-bold rounded-xl border shrink-0 transition-all ${
-                      activeMatiere === m.id
-                        ? 'bg-indigo-500/10 border-indigo-500 text-indigo-400'
-                        : 'bg-slate-950 border-slate-800/80 text-slate-400 hover:text-slate-300'
+                      activeMatiere === m.id ? 'bg-indigo-500/10 border-indigo-500 text-indigo-400' : 'bg-slate-950 border-slate-800/80 text-slate-400 hover:text-slate-300'
                     }`}
-                  >
-                    {m.label}
-                  </button>
+                  >{m.label}</button>
                 ))}
               </div>
             </div>
 
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
               <div className="bg-slate-950 border border-slate-800/80 p-5 rounded-2xl flex items-center gap-4 shadow-sm">
-                <div className="p-3 bg-indigo-500/10 rounded-xl text-indigo-400">
-                  <TrendingUp className="w-6 h-6" />
-                </div>
+                <div className="p-3 bg-indigo-500/10 rounded-xl text-indigo-400"><TrendingUp className="w-6 h-6" /></div>
                 <div>
                   <p className="text-[11px] font-semibold text-slate-500 uppercase">Moyenne de classe</p>
                   <p className="text-2xl font-black text-white">{stats.moyenne} <span className="text-xs font-medium text-slate-400">/20</span></p>
                 </div>
               </div>
-
               <div className="bg-slate-950 border border-slate-800/80 p-5 rounded-2xl flex items-center gap-4 shadow-sm">
-                <div className="p-3 bg-emerald-500/10 rounded-xl text-emerald-400">
-                  <Award className="w-6 h-6" />
-                </div>
+                <div className="p-3 bg-emerald-500/10 rounded-xl text-emerald-400"><Award className="w-6 h-6" /></div>
                 <div>
                   <p className="text-[11px] font-semibold text-slate-500 uppercase">Taux de réussite</p>
                   <p className="text-2xl font-black text-white">{stats.taux}%</p>
                 </div>
               </div>
-
               <div className="bg-slate-950 border border-slate-800/80 p-5 rounded-2xl flex items-center gap-4 shadow-sm">
-                <div className="p-3 bg-amber-500/10 rounded-xl text-amber-400">
-                  <Users className="w-6 h-6" />
-                </div>
+                <div className="p-3 bg-amber-500/10 rounded-xl text-amber-400"><Users className="w-6 h-6" /></div>
                 <div>
                   <p className="text-[11px] font-semibold text-slate-500 uppercase">Progression saisie</p>
                   <p className="text-2xl font-black text-white">{stats.saisis} <span className="text-xs font-medium text-slate-400">/ {stats.totalEleves}</span></p>
                 </div>
               </div>
-
               <div className="bg-slate-950 border border-slate-800/80 p-5 rounded-2xl flex items-center gap-4 shadow-sm">
-                <div className="p-3 bg-indigo-600/10 rounded-xl text-indigo-400">
-                  <Award className="w-6 h-6" />
-                </div>
+                <div className="p-3 bg-indigo-600/10 rounded-xl text-indigo-400"><Award className="w-6 h-6" /></div>
                 <div className="overflow-hidden">
                   <p className="text-[11px] font-semibold text-slate-500 uppercase">Premier de la classe</p>
                   <p className="text-sm font-bold text-white truncate max-w-[150px]" title={stats.top}>{stats.top}</p>
@@ -1419,13 +1167,11 @@ Utilise null pour perf si elle n'est pas visible sur la feuille. Si tu ne peux p
             </div>
 
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-
               <div className="bg-slate-950 border border-slate-800/80 rounded-2xl p-5 lg:col-span-2">
                 <h4 className="font-bold text-white mb-4 flex items-center gap-2">
                   <FileSpreadsheet className="text-indigo-400 w-5 h-5" />
                   Notes de {MATIERES_PRIMAIRE.find(m => m.id === activeMatiere)?.label}
                 </h4>
-
                 <div className="overflow-x-auto">
                   <table className="w-full text-left text-sm text-slate-300">
                     <thead className="bg-slate-900 text-slate-400 text-xs uppercase font-bold">
@@ -1447,25 +1193,16 @@ Utilise null pour perf si elle n'est pas visible sur la feuille. Si tu ne peux p
                             <td className="px-4 py-3 text-xs font-semibold text-slate-400">{el.matricule}</td>
                             <td className="px-4 py-3 font-semibold text-white">{el.nom} {el.prenoms}</td>
                             <td className="px-4 py-3 text-center font-black">
-                              {n !== undefined ? (
-                                <span className={n >= 10 ? 'text-emerald-400' : 'text-rose-400'}>{n}</span>
-                              ) : (
-                                <span className="text-slate-600">-</span>
-                              )}
+                              {n !== undefined ? (<span className={n >= 10 ? 'text-emerald-400' : 'text-rose-400'}>{n}</span>) : (<span className="text-slate-600">-</span>)}
                             </td>
                             <td className="px-4 py-3 text-center">
                               {p !== undefined ? <span className="text-indigo-300">{p}</span> : <span className="text-slate-600">-</span>}
                             </td>
                             <td className="px-4 py-3 text-center">
                               {n !== undefined ? (
-                                n >= 10 ? (
-                                  <span className="bg-emerald-500/10 text-emerald-400 text-[10px] font-bold px-2.5 py-1 rounded-full uppercase">Moyen</span>
-                                ) : (
-                                  <span className="bg-rose-500/10 text-rose-400 text-[10px] font-bold px-2.5 py-1 rounded-full uppercase">Faible</span>
-                                )
-                              ) : (
-                                <span className="text-xs text-slate-500 italic">Non saisi</span>
-                              )}
+                                n >= 10 ? (<span className="bg-emerald-500/10 text-emerald-400 text-[10px] font-bold px-2.5 py-1 rounded-full uppercase">Moyen</span>)
+                                  : (<span className="bg-rose-500/10 text-rose-400 text-[10px] font-bold px-2.5 py-1 rounded-full uppercase">Faible</span>)
+                              ) : (<span className="text-xs text-slate-500 italic">Non saisi</span>)}
                             </td>
                           </tr>
                         );
@@ -1485,42 +1222,32 @@ Utilise null pour perf si elle n'est pas visible sur la feuille. Si tu ne peux p
                     Les indicateurs ci-dessous révèlent la performance d'apprentissage pour la matière <strong className="text-indigo-300">{MATIERES_PRIMAIRE.find(m => m.id === activeMatiere)?.label}</strong>.
                   </p>
                 </div>
-
                 <div className="space-y-3">
                   <div className="bg-slate-900 p-3.5 rounded-xl border border-slate-800">
                     <p className="text-[10px] font-semibold text-slate-500 uppercase">Premier de Classe</p>
                     <p className="text-sm font-extrabold text-indigo-400 mt-1">{stats.top}</p>
                   </div>
-
                   <div className="bg-slate-900 p-3.5 rounded-xl border border-slate-800">
                     <p className="text-[10px] font-semibold text-slate-500 uppercase">Dernier de Classe</p>
                     <p className="text-sm font-extrabold text-rose-400 mt-1">{stats.flop}</p>
                   </div>
                 </div>
-
                 <div className="bg-indigo-950/20 border border-indigo-500/10 p-3 rounded-xl text-center">
                   <p className="text-[10px] text-slate-400">Rappel EducMaster</p>
                   <p className="text-[11px] font-semibold text-slate-300 mt-1">L'importation de notes requiert impérativement les deux notes (Note obtenue + Perfectionnement) pour chaque élève.</p>
                 </div>
               </div>
-
             </div>
           </div>
         )}
 
-        {/* --- ONGLET SAISIE MOBILE-FIRST EXPRESS --- */}
         {activeTab === 'saisie' && activeClass?.eleves.length > 0 && (
           <div className="max-w-xl mx-auto w-full space-y-6">
-
             <div className="flex items-center justify-between">
-              <button
-                onClick={() => setActiveTab('dashboard')}
-                className="text-slate-400 hover:text-white flex items-center gap-1.5 text-sm font-medium"
-              >
+              <button onClick={() => setActiveTab('dashboard')} className="text-slate-400 hover:text-white flex items-center gap-1.5 text-sm font-medium">
                 <ArrowLeft className="w-4 h-4" />
                 Retour au tableau de bord
               </button>
-
               <span className="text-xs text-slate-400 font-semibold bg-slate-950 border border-slate-800 px-3 py-1 rounded-full">
                 {currentSaisieIndex + 1} / {activeClass.eleves.length} élèves
               </span>
@@ -1530,31 +1257,21 @@ Utilise null pour perf si elle n'est pas visible sur la feuille. Si tu ne peux p
               <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1.5 px-1">Matière de saisie</label>
               <select
                 value={activeMatiere}
-                onChange={(e) => {
-                  setActiveMatiere(e.target.value);
-                  setCurrentSaisieIndex(0);
-                }}
+                onChange={(e) => { setActiveMatiere(e.target.value); setCurrentSaisieIndex(0); }}
                 className="w-full bg-slate-900 border border-slate-800 text-slate-200 text-sm font-bold rounded-xl px-3 py-2 focus:outline-none focus:border-indigo-500"
               >
-                {MATIERES_PRIMAIRE.map(m => (
-                  <option key={m.id} value={m.id}>{m.label}</option>
-                ))}
+                {MATIERES_PRIMAIRE.map(m => (<option key={m.id} value={m.id}>{m.label}</option>))}
               </select>
             </div>
 
             <div className="bg-gradient-to-tr from-slate-950 to-slate-900 border border-slate-800/80 rounded-3xl p-6 shadow-xl relative overflow-hidden">
               <div className="absolute top-0 right-0 -mr-6 -mt-6 w-24 h-24 bg-indigo-500/5 rounded-full blur-xl" />
-
               <div className="text-center space-y-1 mb-6">
                 <span className="text-xs font-semibold text-slate-500 tracking-wider uppercase bg-slate-900 border border-slate-800 px-3 py-1 rounded-full">
                   Matricule : {activeEleve?.matricule || '-'}
                 </span>
-                <h3 className="text-2xl font-black text-white pt-2">
-                  {activeEleve?.nom}
-                </h3>
-                <p className="text-indigo-400 text-sm font-semibold">
-                  {activeEleve?.prenoms}
-                </p>
+                <h3 className="text-2xl font-black text-white pt-2">{activeEleve?.nom}</h3>
+                <p className="text-indigo-400 text-sm font-semibold">{activeEleve?.prenoms}</p>
               </div>
 
               <div className="bg-slate-900/60 border border-slate-800 rounded-2xl p-4 mb-6 space-y-3 text-center">
@@ -1562,50 +1279,33 @@ Utilise null pour perf si elle n'est pas visible sur la feuille. Si tu ne peux p
                   <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Contrôle de saisie vocale IA</span>
                   {isListening && <span className="w-2 h-2 rounded-full bg-red-500 animate-ping" />}
                 </div>
-
                 <div className="flex items-center justify-center gap-4">
                   <button
                     onClick={toggleListening}
                     className={`p-4 rounded-full shadow-lg transition-all ${
-                      isListening
-                        ? 'bg-rose-600 text-white animate-pulse shadow-rose-900/20'
-                        : 'bg-indigo-600 hover:bg-indigo-700 text-white shadow-indigo-900/20'
+                      isListening ? 'bg-rose-600 text-white animate-pulse shadow-rose-900/20' : 'bg-indigo-600 hover:bg-indigo-700 text-white shadow-indigo-900/20'
                     }`}
                   >
                     {isListening ? <MicOff className="w-6 h-6" /> : <Mic className="w-6 h-6" />}
                   </button>
                 </div>
-
-                <p className="text-xs font-semibold text-slate-300">
-                  {voiceStatus}
-                </p>
+                <p className="text-xs font-semibold text-slate-300">{voiceStatus}</p>
               </div>
 
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-1.5">
                   <label className="block text-xs font-bold text-slate-400 uppercase tracking-wider text-center">Note Obtenue</label>
                   <input
-                    type="number"
-                    step="0.25"
-                    min="0"
-                    max="20"
-                    placeholder="Note /20"
-                    value={tempNote}
-                    onChange={(e) => setTempNote(e.target.value)}
+                    type="number" step="0.25" min="0" max="20" placeholder="Note /20"
+                    value={tempNote} onChange={(e) => setTempNote(e.target.value)}
                     className="w-full bg-slate-950 border border-slate-800 rounded-2xl px-4 py-4 text-center text-xl font-black text-white focus:outline-none focus:ring-2 focus:ring-indigo-500"
                   />
                 </div>
-
                 <div className="space-y-1.5">
                   <label className="block text-xs font-bold text-slate-400 uppercase tracking-wider text-center">Perfectionnement</label>
                   <input
-                    type="number"
-                    step="0.25"
-                    min="0"
-                    max="20"
-                    placeholder="Soin /20"
-                    value={tempPerf}
-                    onChange={(e) => setTempPerf(e.target.value)}
+                    type="number" step="0.25" min="0" max="20" placeholder="Soin /20"
+                    value={tempPerf} onChange={(e) => setTempPerf(e.target.value)}
                     className="w-full bg-slate-950 border border-slate-800 rounded-2xl px-4 py-4 text-center text-xl font-black text-indigo-300 focus:outline-none focus:ring-2 focus:ring-indigo-500"
                   />
                 </div>
@@ -1613,39 +1313,26 @@ Utilise null pour perf si elle n'est pas visible sur la feuille. Si tu ne peux p
 
               <div className="flex items-center justify-between gap-3 mt-6 pt-2">
                 <button
-                  onClick={handlePrev}
-                  disabled={currentSaisieIndex === 0}
+                  onClick={handlePrev} disabled={currentSaisieIndex === 0}
                   className="flex-1 bg-slate-900 hover:bg-slate-800 text-slate-300 text-sm font-semibold py-3.5 rounded-xl border border-slate-800 disabled:opacity-40 transition-colors"
-                >
-                  Précédent
-                </button>
-
+                >Précédent</button>
                 <button
                   onClick={handleSaveCurrentAndNext}
                   className="flex-2 bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-bold py-3.5 px-6 rounded-xl shadow-lg shadow-indigo-900/30 flex items-center justify-center gap-1.5 transition-colors"
-                >
-                  Enregistrer & Suivant
-                  <ChevronRight className="w-4 h-4" />
-                </button>
+                >Enregistrer & Suivant<ChevronRight className="w-4 h-4" /></button>
               </div>
-
             </div>
 
             <p className="text-center text-[10px] text-slate-500">
               Matière de saisie en cours : <strong className="text-slate-400">{MATIERES_PRIMAIRE.find(m => m.id === activeMatiere)?.label}</strong>
             </p>
-
           </div>
         )}
 
-        {/* --- ONGLET SCANNER IA DE FEUILLES DE NOTES --- */}
         {activeTab === 'scan' && (
           <div className="max-w-2xl mx-auto w-full space-y-6">
             <div className="flex items-center justify-between">
-              <button
-                onClick={() => setActiveTab('dashboard')}
-                className="text-slate-400 hover:text-white flex items-center gap-1.5 text-sm font-medium"
-              >
+              <button onClick={() => setActiveTab('dashboard')} className="text-slate-400 hover:text-white flex items-center gap-1.5 text-sm font-medium">
                 <ArrowLeft className="w-4 h-4" />
                 Retour au tableau de bord
               </button>
@@ -1663,46 +1350,23 @@ Utilise null pour perf si elle n'est pas visible sur la feuille. Si tu ne peux p
               <div>
                 <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1.5 px-1">Matière concernée</label>
                 <select
-                  value={scanMatiere}
-                  onChange={(e) => setScanMatiere(e.target.value)}
-                  disabled={scanStatus === 'review'}
+                  value={scanMatiere} onChange={(e) => setScanMatiere(e.target.value)} disabled={scanStatus === 'review'}
                   className="w-full bg-slate-900 border border-slate-800 text-slate-200 text-sm font-bold rounded-xl px-3 py-2.5 focus:outline-none focus:border-indigo-500 disabled:opacity-50"
                 >
-                  {MATIERES_PRIMAIRE.map(m => (
-                    <option key={m.id} value={m.id}>{m.label}</option>
-                  ))}
+                  {MATIERES_PRIMAIRE.map(m => (<option key={m.id} value={m.id}>{m.label}</option>))}
                 </select>
               </div>
 
-              <input
-                ref={cameraInputRef}
-                type="file"
-                accept="image/*"
-                capture="environment"
-                onChange={handleScanFileSelected}
-                className="hidden"
-              />
-              <input
-                ref={galleryInputRef}
-                type="file"
-                accept="image/*"
-                onChange={handleScanFileSelected}
-                className="hidden"
-              />
+              <input ref={cameraInputRef} type="file" accept="image/*" capture="environment" onChange={handleScanFileSelected} className="hidden" />
+              <input ref={galleryInputRef} type="file" accept="image/*" onChange={handleScanFileSelected} className="hidden" />
 
               {!scanImage && (
                 <div className="grid grid-cols-2 gap-3">
-                  <button
-                    onClick={() => cameraInputRef.current?.click()}
-                    className="bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-sm py-4 rounded-2xl flex flex-col items-center justify-center gap-2 transition-colors"
-                  >
+                  <button onClick={() => cameraInputRef.current?.click()} className="bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-sm py-4 rounded-2xl flex flex-col items-center justify-center gap-2 transition-colors">
                     <Camera className="w-6 h-6" />
                     Prendre une photo
                   </button>
-                  <button
-                    onClick={() => galleryInputRef.current?.click()}
-                    className="bg-slate-800 hover:bg-slate-700 text-white font-bold text-sm py-4 rounded-2xl flex flex-col items-center justify-center gap-2 transition-colors"
-                  >
+                  <button onClick={() => galleryInputRef.current?.click()} className="bg-slate-800 hover:bg-slate-700 text-white font-bold text-sm py-4 rounded-2xl flex flex-col items-center justify-center gap-2 transition-colors">
                     <ImageIcon className="w-6 h-6" />
                     Choisir un fichier
                   </button>
@@ -1714,26 +1378,22 @@ Utilise null pour perf si elle n'est pas visible sur la feuille. Si tu ne peux p
                   <div className="rounded-2xl overflow-hidden border border-slate-800 bg-slate-950">
                     <img src={scanImage.previewUrl} alt="Feuille de notes à analyser" className="w-full max-h-80 object-contain" />
                   </div>
-
                   {scanStatus === 'error' && (
                     <div className="bg-rose-950/40 border border-rose-800/60 rounded-xl p-3 text-xs text-rose-300 flex items-center gap-2">
                       <AlertTriangle className="w-4 h-4 shrink-0" />
                       {scanErrorMsg}
                     </div>
                   )}
-
                   <div className="flex gap-3">
                     <button
-                      onClick={resetScan}
-                      disabled={scanStatus === 'analyzing'}
+                      onClick={resetScan} disabled={scanStatus === 'analyzing'}
                       className="flex-1 bg-slate-900 hover:bg-slate-800 border border-slate-800 text-slate-300 text-sm font-semibold py-3 rounded-xl flex items-center justify-center gap-1.5 disabled:opacity-50 transition-colors"
                     >
                       <RotateCcw className="w-4 h-4" />
                       Changer de photo
                     </button>
                     <button
-                      onClick={handleAnalyzeScan}
-                      disabled={scanStatus === 'analyzing'}
+                      onClick={handleAnalyzeScan} disabled={scanStatus === 'analyzing'}
                       className="flex-2 bg-gradient-to-r from-indigo-600 to-purple-600 hover:opacity-95 text-white text-sm font-bold py-3 px-6 rounded-xl shadow-lg shadow-indigo-900/30 flex items-center justify-center gap-2 disabled:opacity-60 transition-all"
                     >
                       {scanStatus === 'analyzing' ? (
@@ -1749,11 +1409,8 @@ Utilise null pour perf si elle n'est pas visible sur la feuille. Si tu ne peux p
                       )}
                     </button>
                   </div>
-
                   {scanStatus === 'analyzing' && scanProgressMsg && (
-                    <p className="text-center text-xs text-slate-400 italic">
-                      {scanProgressMsg}
-                    </p>
+                    <p className="text-center text-xs text-slate-400 italic">{scanProgressMsg}</p>
                   )}
                 </div>
               )}
@@ -1763,11 +1420,9 @@ Utilise null pour perf si elle n'est pas visible sur la feuille. Si tu ne peux p
                   <div className="rounded-2xl overflow-hidden border border-slate-800 bg-slate-950">
                     <img src={scanImage.previewUrl} alt="Feuille de notes analysée" className="w-full max-h-56 object-contain" />
                   </div>
-
                   <div className="bg-indigo-950/20 border border-indigo-500/10 rounded-xl p-3 text-xs text-slate-300">
                     Vérifiez les notes détectées ci-dessous avant d'enregistrer. Décochez ou corrigez une ligne si besoin.
                   </div>
-
                   <div className="overflow-x-auto rounded-xl border border-slate-800">
                     <table className="w-full text-left text-xs text-slate-300">
                       <thead className="bg-slate-900 text-slate-400 uppercase font-bold">
@@ -1782,32 +1437,19 @@ Utilise null pour perf si elle n'est pas visible sur la feuille. Si tu ne peux p
                         {scanResults.map(r => (
                           <tr key={r.studentId} className={r.include ? '' : 'opacity-50'}>
                             <td className="px-3 py-2">
-                              <input
-                                type="checkbox"
-                                checked={r.include}
-                                onChange={(e) => updateScanResultField(r.studentId, 'include', e.target.checked)}
-                                className="w-4 h-4 accent-indigo-500"
-                              />
+                              <input type="checkbox" checked={r.include} onChange={(e) => updateScanResultField(r.studentId, 'include', e.target.checked)} className="w-4 h-4 accent-indigo-500" />
                             </td>
                             <td className="px-3 py-2 font-semibold text-white whitespace-normal">{r.nom}</td>
                             <td className="px-3 py-2 text-center">
                               <input
-                                type="number"
-                                min="0"
-                                max="20"
-                                step="0.25"
-                                value={r.note}
+                                type="number" min="0" max="20" step="0.25" value={r.note}
                                 onChange={(e) => updateScanResultField(r.studentId, 'note', e.target.value)}
                                 className="w-16 bg-slate-950 border border-slate-800 rounded-lg px-2 py-1 text-center text-white focus:outline-none focus:border-indigo-500"
                               />
                             </td>
                             <td className="px-3 py-2 text-center">
                               <input
-                                type="number"
-                                min="0"
-                                max="20"
-                                step="0.25"
-                                value={r.perf}
+                                type="number" min="0" max="20" step="0.25" value={r.perf}
                                 onChange={(e) => updateScanResultField(r.studentId, 'perf', e.target.value)}
                                 className="w-16 bg-slate-950 border border-slate-800 rounded-lg px-2 py-1 text-center text-indigo-300 focus:outline-none focus:border-indigo-500"
                               />
@@ -1817,20 +1459,9 @@ Utilise null pour perf si elle n'est pas visible sur la feuille. Si tu ne peux p
                       </tbody>
                     </table>
                   </div>
-
                   <div className="flex gap-3">
-                    <button
-                      onClick={resetScan}
-                      className="flex-1 bg-slate-900 hover:bg-slate-800 border border-slate-800 text-slate-300 text-sm font-semibold py-3 rounded-xl transition-colors"
-                    >
-                      Annuler
-                    </button>
-                    <button
-                      onClick={handleApplyScanResults}
-                      className="flex-2 bg-gradient-to-r from-emerald-500 to-teal-500 text-slate-950 font-black text-sm py-3 px-6 rounded-xl shadow-lg shadow-emerald-500/10 hover:opacity-95 transition-all"
-                    >
-                      Enregistrer les notes cochées
-                    </button>
+                    <button onClick={resetScan} className="flex-1 bg-slate-900 hover:bg-slate-800 border border-slate-800 text-slate-300 text-sm font-semibold py-3 rounded-xl transition-colors">Annuler</button>
+                    <button onClick={handleApplyScanResults} className="flex-2 bg-gradient-to-r from-emerald-500 to-teal-500 text-slate-950 font-black text-sm py-3 px-6 rounded-xl shadow-lg shadow-emerald-500/10 hover:opacity-95 transition-all">Enregistrer les notes cochées</button>
                   </div>
                 </div>
               )}
@@ -1838,11 +1469,8 @@ Utilise null pour perf si elle n'est pas visible sur la feuille. Si tu ne peux p
           </div>
         )}
 
-        {/* --- ONGLET LISTE DES ÉLÈVES --- */}
         {activeTab === 'eleves' && (
           <div className="space-y-6">
-
-            {/* --- IMPORTATION RAPIDE EDUCMASTER --- */}
             <div className="bg-gradient-to-r from-violet-950 via-slate-900 to-slate-950 border border-violet-500/20 rounded-2xl p-5 flex flex-col sm:flex-row items-center justify-between gap-4">
               <div className="flex items-center gap-4">
                 <div className="bg-violet-500/10 border border-violet-500/20 text-violet-400 p-3 rounded-2xl shrink-0">
@@ -1853,13 +1481,10 @@ Utilise null pour perf si elle n'est pas visible sur la feuille. Si tu ne peux p
                   <p className="text-xs text-slate-400 mt-0.5 max-w-md">Importez directement le canevas EducMaster (.csv, .txt, .xlsx ou .xls) prérempli avec la liste de vos élèves — sans ressaisie manuelle.</p>
                 </div>
               </div>
-
               <input
-                ref={importFileInputRef}
-                type="file"
+                ref={importFileInputRef} type="file"
                 accept=".csv,.txt,.xlsx,.xls,text/csv,text/plain,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel"
-                onChange={handleImportEducMasterFile}
-                className="hidden"
+                onChange={handleImportEducMasterFile} className="hidden"
               />
               <button
                 onClick={() => importFileInputRef.current?.click()}
@@ -1871,52 +1496,38 @@ Utilise null pour perf si elle n'est pas visible sur la feuille. Si tu ne peux p
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-
               <div className="bg-slate-950 border border-slate-800 rounded-2xl p-5 space-y-4 h-fit">
                 <h4 className="font-bold text-white text-md flex items-center gap-2">
                   <Plus className="text-indigo-400" />
                   Ajouter un élève
                 </h4>
-
                 <div className="space-y-3.5">
                   <div>
                     <label className="block text-xs font-semibold text-slate-400 mb-1">Nom de famille</label>
                     <input
-                      type="text"
-                      required
-                      placeholder="Saisissez en majuscules"
-                      value={newStudentNom}
-                      onChange={(e) => setNewStudentNom(e.target.value)}
+                      type="text" required placeholder="Saisissez en majuscules"
+                      value={newStudentNom} onChange={(e) => setNewStudentNom(e.target.value)}
                       className="w-full bg-slate-900 border border-slate-800 rounded-xl px-3 py-2 text-slate-200 text-xs focus:outline-none focus:border-indigo-500"
                     />
                   </div>
-
                   <div>
                     <label className="block text-xs font-semibold text-slate-400 mb-1">Prénoms</label>
                     <input
-                      type="text"
-                      required
-                      placeholder="Saisissez les prénoms"
-                      value={newStudentPrenoms}
-                      onChange={(e) => setNewStudentPrenoms(e.target.value)}
+                      type="text" required placeholder="Saisissez les prénoms"
+                      value={newStudentPrenoms} onChange={(e) => setNewStudentPrenoms(e.target.value)}
                       className="w-full bg-slate-900 border border-slate-800 rounded-xl px-3 py-2 text-slate-200 text-xs focus:outline-none focus:border-indigo-500"
                     />
                   </div>
-
                   <div>
                     <label className="block text-xs font-semibold text-slate-400 mb-1">Numéro Matricule (EducMaster - Optionnel)</label>
                     <input
-                      type="text"
-                      placeholder="Automatique si vide"
-                      value={newStudentMatricule}
-                      onChange={(e) => setNewStudentMatricule(e.target.value)}
+                      type="text" placeholder="Automatique si vide"
+                      value={newStudentMatricule} onChange={(e) => setNewStudentMatricule(e.target.value)}
                       className="w-full bg-slate-900 border border-slate-800 rounded-xl px-3 py-2 text-slate-200 text-xs focus:outline-none focus:border-indigo-500"
                     />
                   </div>
-
                   <button
-                    type="button"
-                    onClick={handleAddStudent}
+                    type="button" onClick={handleAddStudent}
                     className="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs py-2.5 rounded-xl transition-colors flex items-center justify-center gap-1.5 shadow-md shadow-indigo-900/30"
                   >
                     <Plus className="w-4 h-4" />
@@ -1959,9 +1570,7 @@ Utilise null pour perf si elle n'est pas visible sur la feuille. Si tu ne peux p
                                 onClick={() => handleDeleteStudent(el.id)}
                                 className="p-1.5 bg-rose-500/10 border border-rose-500/20 text-rose-400 rounded-lg hover:bg-rose-500/20 transition-colors"
                                 title="Retirer cet élève"
-                              >
-                                <Trash2 className="w-4 h-4" />
-                              </button>
+                              ><Trash2 className="w-4 h-4" /></button>
                             </td>
                           </tr>
                         ))}
@@ -1970,25 +1579,21 @@ Utilise null pour perf si elle n'est pas visible sur la feuille. Si tu ne peux p
                   </div>
                 )}
               </div>
-
             </div>
           </div>
         )}
 
-        {/* --- PARAMÈTRES / CONFIGURATION --- */}
         {activeTab === 'parametres' && (
           <div className="max-w-2xl mx-auto w-full space-y-6">
             <h3 className="font-bold text-xl text-white">Paramètres généraux</h3>
 
             <div className="bg-slate-950 border border-slate-800 rounded-2xl p-5 space-y-4">
               <h4 className="font-bold text-slate-200 text-sm">Profil Enseignant</h4>
-
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
                   <label className="block text-xs font-semibold text-slate-400 mb-1">Nom d'Enseignant</label>
                   <input
-                    type="text"
-                    value={user.nom}
+                    type="text" value={user.nom}
                     onChange={(e) => setUser(prev => ({ ...prev, nom: e.target.value }))}
                     className="w-full bg-slate-900 border border-slate-800 rounded-xl px-3.5 py-2.5 text-slate-200 text-xs focus:outline-none focus:border-indigo-500 font-semibold"
                   />
@@ -1996,9 +1601,7 @@ Utilise null pour perf si elle n'est pas visible sur la feuille. Si tu ne peux p
                 <div>
                   <label className="block text-xs font-semibold text-slate-400 mb-1">Téléphone</label>
                   <input
-                    type="tel"
-                    maxLength="10"
-                    value={user.tel}
+                    type="tel" maxLength="10" value={user.tel}
                     onChange={(e) => setUser(prev => ({ ...prev, tel: e.target.value.replace(/\D/g, '').slice(0, 10) }))}
                     className="w-full bg-slate-900 border border-slate-800 rounded-xl px-3.5 py-2.5 text-slate-200 text-xs focus:outline-none focus:border-indigo-500 font-semibold"
                   />
@@ -2008,7 +1611,6 @@ Utilise null pour perf si elle n'est pas visible sur la feuille. Si tu ne peux p
 
             <div className="bg-slate-950 border border-slate-800 rounded-2xl p-5 space-y-4">
               <h4 className="font-bold text-slate-200 text-sm">Informations de licence</h4>
-
               <div className="flex flex-col sm:flex-row justify-between sm:items-center gap-3 bg-slate-900 p-4 rounded-xl border border-slate-800">
                 <div>
                   <p className="text-xs font-semibold text-slate-400">Statut actuel du compte :</p>
@@ -2019,12 +1621,7 @@ Utilise null pour perf si elle n'est pas visible sur la feuille. Si tu ne peux p
                   </p>
                 </div>
                 {user.statut_abonnement === 'demo' && (
-                  <button
-                    onClick={() => setPaywallModal(true)}
-                    className="bg-gradient-to-r from-amber-500 to-orange-500 text-slate-950 font-black text-xs px-4 py-2 rounded-xl shrink-0"
-                  >
-                    S'abonner
-                  </button>
+                  <button onClick={() => setPaywallModal(true)} className="bg-gradient-to-r from-amber-500 to-orange-500 text-slate-950 font-black text-xs px-4 py-2 rounded-xl shrink-0">S'abonner</button>
                 )}
               </div>
 
@@ -2033,31 +1630,23 @@ Utilise null pour perf si elle n'est pas visible sur la feuille. Si tu ne peux p
                   <Library className={`w-5 h-5 ${isPremiumPlan ? 'text-amber-400' : 'text-slate-500'}`} />
                   <div>
                     <p className="text-xs font-semibold text-slate-400">Fiches pédagogiques</p>
-                    <p className="text-sm font-bold text-white">
-                      {isPremiumPlan ? 'Accès VIP actif' : 'Réservé à la formule 5 Ans VIP'}
-                    </p>
+                    <p className="text-sm font-bold text-white">{isPremiumPlan ? 'Accès VIP actif' : 'Réservé à la formule 5 Ans VIP'}</p>
                   </div>
                 </div>
                 <button
                   onClick={handleOpenFiches}
-                  className={`text-xs font-black px-4 py-2 rounded-xl shrink-0 ${
-                    isPremiumPlan
-                      ? 'bg-amber-500 text-slate-950 hover:opacity-95'
-                      : 'bg-slate-800 text-slate-400 hover:bg-slate-700'
-                  }`}
-                >
-                  {isPremiumPlan ? 'Ouvrir' : 'Débloquer'}
-                </button>
+                  className={`text-xs font-black px-4 py-2 rounded-xl shrink-0 ${isPremiumPlan ? 'bg-amber-500 text-slate-950 hover:opacity-95' : 'bg-slate-800 text-slate-400 hover:bg-slate-700'}`}
+                >{isPremiumPlan ? 'Ouvrir' : 'Débloquer'}</button>
               </div>
             </div>
 
             <div className="bg-slate-950 border border-slate-800 rounded-2xl p-5 space-y-3">
               <h4 className="font-bold text-rose-400 text-sm">Zone de danger</h4>
               <p className="text-xs text-slate-400">En réinitialisant l'application, toutes vos classes enregistrées et les notes associées seront effacées de l'espace de stockage.</p>
-
               <button
                 onClick={() => {
                   if (confirm("Voulez-vous vraiment réinitialiser l'application ? Cette action est irréversible.")) {
+                    localStorage.removeItem(STORAGE_KEY);
                     setClasses([{ id: 'class-1', nom: 'CM2 Émeraude', niveau: 'CM2', eleves: ELEVES_INITIAL_CM2 }]);
                     setNotes({});
                     setSelectedClassId('class-1');
@@ -2067,16 +1656,13 @@ Utilise null pour perf si elle n'est pas visible sur la feuille. Si tu ne peux p
                   }
                 }}
                 className="bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 font-bold text-xs px-4 py-2 rounded-xl border border-rose-500/20"
-              >
-                Réinitialiser l'application
-              </button>
+              >Réinitialiser l'application</button>
             </div>
           </div>
         )}
 
       </main>
 
-      {/* --- BAS DE PAGE --- */}
       <footer className="bg-slate-950 border-t border-slate-800/80 px-4 py-4 text-center text-xs text-slate-500">
         <div className="max-w-6xl mx-auto flex flex-col sm:flex-row items-center justify-between gap-3">
           <p>© 2026 MastaNote AI+ - Spécial Primaire Bénin (CI à CM2). Tous droits réservés.</p>
