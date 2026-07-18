@@ -3,6 +3,27 @@ import { createRoot } from 'react-dom/client';
 import App from './App.tsx';
 import './index.css';
 
+// Importation des fonctions nécessaires du SDK Firebase
+import { initializeApp } from "firebase/app";
+import { getAnalytics } from "firebase/analytics";
+
+// Configuration Firebase réelle pour MastaNote AI
+const firebaseConfig = {
+  apiKey: "AIzaSyD4MaMDXclkN2m7TPWCYIejF7itGF0ouyI",
+  authDomain: "mastanote-ai.firebaseapp.com",
+  projectId: "mastanote-ai",
+  storageBucket: "mastanote-ai.firebasestorage.app",
+  messagingSenderId: "1055522861224",
+  appId: "1:1055522861224:web:73100985934979e403929d",
+  measurementId: "G-SEWEG6KTMP"
+};
+
+// Initialisation de Firebase
+const app = initializeApp(firebaseConfig);
+
+// Initialisation de Google Analytics
+const analytics = getAnalytics(app);
+
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
     <App />
