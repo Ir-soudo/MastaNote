@@ -1,134 +1,208 @@
-const express = require('express');
-const cors = require('cors');
+import express from 'express';
+import cors from 'cors';
 
 const app = express();
-app.use(express.json());
 
-// 1. Sécurité CORS : Autoriser uniquement votre domaine de production et local
-const allowedOrigins = [
-  'https://mastanote-ai.onrender.com', // Votre nouvelle URL de déploiement Frontend
-  'http://localhost:5173',
-  'https://stackblitz.com'
-];
+// Autorise votre frontend à appeler ce backend.
+// En production, remplacez '*' par l'URL exacte de votre frontend
+// (ex: 'https://mastanote-ai.onrender.com') pour plus de sécurité.
+app.use(cors({ origin: '*' }));
 
-app.use(cors({
-  origin: function (origin, callback) {
-    if (!origin) return callback(null, true);
-    if (allowedOrigins.indexOf(origin) !== -1 || origin.includes('stackblitz')) {
-      callback(null, true);
-    } else {
-      callback(new Error('Bloqué par la sécurité CORS de MastaNote'));
+// Les images encodées en base64 peuvent facilement dépasser la limite
+// par défaut d'Express (100kb) — on l'augmente à 15 Mo.
+app.use(express.json({ limit: '15mb' }));
+
+const ANTHROPIC_API_KEY = process.env.ANTHROPIC_API_KEY;
+const CHARIOW_SECRET_KEY = process.env.CHARIOW_SECRET_KEY; // clé secrète Chariow (sk_live_...), jamais côté client
+const CHARIOW_API_BASE = 'https://api.chariow.com/v1';
+const PORT = process.env.PORT || 3000;
+
+// Route de contrôle simple pour vérifier que le service tourne
+app.get('/', (req, res) => {
+  res.send('MastaNote AI+ backend — OK');
+});
+
+// ==================================================================
+// SCANNER IA — proxy sécurisé vers l'API Anthropic (clé jamais exposée)
+// ==================================================================
+app.post('/api/scan', async (req, res) => {
+  try {
+    const { imageBase64, mediaType, promptText } = req.body;
+
+    if (!imageBase64 || !mediaType || !promptText) {
+      return res.status(400).json({
+        error: 'Champs manquants : imageBase64, mediaType et promptText sont requis.'
+      });
     }
-  },
-  methods: ['GET', 'POST', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization']
-}));
 
-// Récupération sécurisée de la clé API Chariow depuis les variables d'environnement de Render
-// En local, vous pouvez la définir ou utiliser une valeur par défaut pour les tests
-const CHARIOW_API_KEY = process.env.CHARIOW_API_KEY || 'sk_live_votre_cle_ici';
-const CHARIOW_BASE_URL = 'https://api.chariow.com/v1';
+    if (!ANTHROPIC_API_KEY) {
+      console.error('ANTHROPIC_API_KEY manquante dans les variables d\'environnement.');
+      return res.status(500).json({
+        error: "Clé API Anthropic non configurée sur le serveur."
+      });
+    }
 
-// 2. ROUTE MISE À JOUR : Validation et Activation via Chariow API
-app.post('/api/validate-license', async (req, res) => {
-  const { licenseKey } = req.body;
+    const anthropicResponse = await fetch('https://api.anthropic.com/v1/messages', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-api-key': ANTHROPIC_API_KEY,
+        'anthropic-version': '2023-06-01'
+      },
+      body: JSON.stringify({
+        model: 'claude-sonnet-4-6',
+        max_tokens: 1000,
+        messages: [
+          {
+            role: 'user',
+            content: [
+              {
+                type: 'image',
+                source: { type: 'base64', media_type: mediaType, data: imageBase64 }
+              },
+              { type: 'text', text: promptText }
+            ]
+          }
+        ]
+      })
+    });
 
-  if (!licenseKey) {
-    return res.status(400).json({ 
-      success: false, 
-      message: "La clé de licence est requise." 
+    if (!anthropicResponse.ok) {
+      const errBody = await anthropicResponse.text();
+      console.error('Erreur API Anthropic:', anthropicResponse.status, errBody);
+      return res.status(502).json({
+        error: `Erreur de l'API Anthropic (code ${anthropicResponse.status}). Réessayez dans un instant.`
+      });
+    }
+
+    const data = await anthropicResponse.json();
+
+    const textBlock = (data.content || [])
+      .filter(block => block.type === 'text')
+      .map(block => block.text)
+      .join('');
+
+    return res.json({ content: textBlock });
+  } catch (err) {
+    console.error('Erreur /api/scan:', err);
+    return res.status(500).json({
+      error: "Erreur interne du serveur lors de l'analyse de l'image."
     });
   }
+});
 
+// ==================================================================
+// VALIDATION DE LICENCE — intégration réelle de l'API Chariow
+// Contrat vérifié contre la documentation officielle (chariow.dev) :
+//   GET  /v1/licenses/{licenseKey}              → détails + statut
+//   POST /v1/licenses/{licenseKey}/activate      → active sur un appareil
+// Réponses Chariow au format { message, data, errors }.
+// ==================================================================
+app.post('/api/validate-license', async (req, res) => {
   try {
-    // Étape A : On récupère les détails de la licence auprès de Chariow
-    const checkResponse = await fetch(`${CHARIOW_BASE_URL}/licenses/${licenseKey.trim()}`, {
+    const { licenseKey } = req.body;
+
+    if (!licenseKey || typeof licenseKey !== 'string' || !licenseKey.trim()) {
+      return res.status(400).json({ success: false, message: 'Clé de licence manquante.' });
+    }
+
+    if (!CHARIOW_SECRET_KEY) {
+      console.error('CHARIOW_SECRET_KEY manquante dans les variables d\'environnement.');
+      return res.status(500).json({ success: false, message: 'Configuration serveur incomplète.' });
+    }
+
+    const cleanKey = licenseKey.trim();
+    const authHeaders = {
+      'Authorization': `Bearer ${CHARIOW_SECRET_KEY}`,
+      'Content-Type': 'application/json'
+    };
+
+    // --- 1. Récupération de la licence par sa clé ---
+    const licenseResponse = await fetch(`${CHARIOW_API_BASE}/licenses/${encodeURIComponent(cleanKey)}`, {
       method: 'GET',
-      headers: {
-        'Authorization': `Bearer ${CHARIOW_API_KEY}`,
-        'Content-Type': 'application/json'
-      }
+      headers: authHeaders
     });
 
-    if (!checkResponse.ok) {
-      return res.status(404).json({ 
-        success: false, 
-        message: "Clé de licence invalide ou introuvable sur Chariow." 
+    if (!licenseResponse.ok) {
+      // 404 ou clé mal formée côté Chariow
+      return res.status(200).json({
+        success: false,
+        message: 'Clé de licence introuvable. Vérifiez votre e-mail de confirmation Chariow.'
       });
     }
 
-    const checkResult = await checkResponse.json();
-    const licenseData = checkResult.data;
+    const licenseBody = await licenseResponse.json();
+    let license = licenseBody.data;
 
-    // Étape B : Vérification des statuts de validité
-    if (!licenseData.is_active && licenseData.status !== 'pending_activation') {
-      return res.status(400).json({ 
-        success: false, 
-        message: "Cette licence n'est plus active ou a été révoquée." 
-      });
+    if (!license) {
+      return res.status(200).json({ success: false, message: 'Réponse Chariow invalide.' });
     }
 
-    if (licenseData.is_expired) {
-      return res.status(400).json({ 
-        success: false, 
-        message: "Cette licence a expiré." 
-      });
+    // --- 2. Statuts bloquants ---
+    if (license.status === 'revoked') {
+      return res.status(200).json({ success: false, message: 'Cette licence a été révoquée.' });
+    }
+    if (license.is_expired) {
+      return res.status(200).json({ success: false, message: 'Cette licence a expiré.' });
     }
 
-    // Étape C : Si la licence est neuve ou valide, on procède à l'activation de l'appareil
-    if (licenseData.can_activate) {
-      const activateResponse = await fetch(`${CHARIOW_BASE_URL}/licenses/${licenseKey.trim()}/activate`, {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${CHARIOW_API_KEY}`,
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({
-          device_identifier: req.headers['user-agent'] || 'MastaNote_User_Device'
-        })
-      });
-
-      if (!activateResponse.ok) {
-        const actError = await activateResponse.json().catch(() => ({}));
-        return res.status(400).json({
+    // --- 3. Si pas encore active mais activable, on l'active sur cet "appareil" ---
+    // (l'application étant une PWA web, on utilise un identifiant logique fixe
+    // plutôt qu'une empreinte matérielle — chaque enseignant active sa licence
+    // une seule fois lors de sa première saisie de clé).
+    if (!license.is_active) {
+      if (!license.can_activate) {
+        return res.status(200).json({
           success: false,
-          message: actError.message || "La limite d'activation d'appareils a été atteinte."
+          message: "Cette licence a atteint son nombre maximal d'activations."
         });
       }
+
+      const activateResponse = await fetch(
+        `${CHARIOW_API_BASE}/licenses/${encodeURIComponent(cleanKey)}/activate`,
+        {
+          method: 'POST',
+          headers: authHeaders,
+          body: JSON.stringify({ device_identifier: 'mastanote-ai-web-app' })
+        }
+      );
+
+      if (!activateResponse.ok) {
+        const errBody = await activateResponse.json().catch(() => ({}));
+        console.error('Erreur activation Chariow:', activateResponse.status, errBody);
+        return res.status(200).json({
+          success: false,
+          message: errBody.message || "Impossible d'activer cette licence."
+        });
+      }
+
+      // Re-vérification après activation pour récupérer le statut à jour
+      const refreshed = await fetch(`${CHARIOW_API_BASE}/licenses/${encodeURIComponent(cleanKey)}`, {
+        method: 'GET',
+        headers: authHeaders
+      });
+      const refreshedBody = await refreshed.json().catch(() => ({}));
+      if (refreshedBody.data) {
+        license = refreshedBody.data;
+      }
     }
 
-    // Étape D : Tout est bon ! On renvoie les infos au Frontend
+    // --- 4. Succès : on renvoie les infos utiles au frontend ---
     return res.json({
       success: true,
-      message: "Licence Chariow validée et activée !",
-      productId: licenseData.product.id, // Correspondra à prd_z2kjla30, prd_6duiuhl1, ou prd_s877x4vl
-      expiresAt: licenseData.expires_at || new Date(Date.now() + 365 * 24 * 60 * 60 * 1000).toISOString() // Date de repli si à vie
+      productId: license.product?.id || null,
+      expiresAt: license.expires_at || null,
+      message: 'Licence activée avec succès.'
     });
-
-  } catch (error) {
-    console.error("Erreur d'appel API Chariow:", error);
-    return res.status(500).json({ 
-      success: false, 
-      message: "Une erreur réseau est survenue lors de la validation avec Chariow." 
+  } catch (err) {
+    console.error('Erreur /api/validate-license:', err);
+    return res.status(500).json({
+      success: false,
+      message: 'Erreur interne du serveur lors de la validation de la licence.'
     });
   }
 });
 
-// Route d'analyse de scan
-app.post('/api/scan', (req, res) => {
-  const { imageBase64 } = req.body;
-  if (!imageBase64) {
-    return res.status(400).json({ error: "Aucune image fournie." });
-  }
-  return res.json({ success: true, content: "[]" });
-});
-
-// Route d'accueil
-app.get('/', (req, res) => {
-  res.send('Serveur API MastaNote AI+ connecté à Chariow 🚀');
-});
-
-const PORT = process.env.PORT || 5000;
 app.listen(PORT, () => {
-  console.log(`Le serveur tourne sur le port ${PORT}`);
+  console.log(`Serveur MastaNote AI+ démarré sur le port ${PORT}`);
 });
