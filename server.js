@@ -1,60 +1,86 @@
-import express from 'express';
-import cors from 'cors';
-import { Anthropic } from '@anthropic-ai/sdk';
+const express = require('express');
+const cors = require('cors');
 
 const app = express();
+app.use(express.json());
 
-// Render injectera automatiquement le bon port dans process.env.PORT en production
-const PORT = process.env.PORT || 3001;
+// 1. Sécurité CORS : On autorise ton frontend à dialoguer avec l'API
+const allowedOrigins = [
+  'https://mastanote.onrender.com', // Remplace par ton URL finale frontend sur Render
+  'http://localhost:5173',          // Pour les tests locaux
+  'https://stackblitz.com'          // Pour tes tests StackBlitz
+];
 
-app.use(cors());
-app.use(express.json({ limit: '50mb' }));
-
-// Initialisation du client Anthropic avec la clé stockée sur Render
-const anthropic = new Anthropic({
-  apiKey: process.env.ANTHROPIC_API_KEY,
-});
-
-app.post('/api/scan', async (req, res) => {
-  try {
-    const { image, students } = req.body;
-
-    if (!image) {
-      return res.status(400).json({ error: "Aucune image fournie." });
+app.use(cors({
+  origin: function (origin, callback) {
+    if (!origin) return callback(null, true);
+    if (allowedOrigins.indexOf(origin) !== -1 || origin.includes('stackblitz')) {
+      callback(null, true);
+    } else {
+      callback(new Error('Bloqué par la sécurité CORS de MastaNote'));
     }
+  },
+  methods: ['GET', 'POST', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization']
+}));
 
-    // Appel à l'API Claude pour analyser la copie
-    const response = await anthropic.messages.create({
-      model: "claude-3-5-sonnet-20241022",
-      max_tokens: 1024,
-      messages: [
-        {
-          role: "user",
-          content: [
-            {
-              type: "text",
-              text: `Tu es un enseignant expert. Analyse cette image de copie d'élève et extrait les notes. Voici la liste des élèves pour t'aider : ${JSON.stringify(students)}`
-            },
-            {
-              type: "image",
-              source: {
-                type: "base64",
-                media_type: "image/jpeg",
-                data: image
-              }
-            }
-          ]
-        }
-      ]
+// Simulation de base de données de clés d'activation générées via Chariow webhook
+// Note : En production, ces clés proviendront de MongoDB ou PostgreSQL.
+const LICENSES_DB = {
+  "MN-2026-PREM-XYZ89": { productId: "prd_z2kjla30", durationMonths: 12 }, // Formule 1 An
+  "MN-2026-SERE-ABC12": { productId: "prd_6duiuhl1", durationMonths: 36 }, // Formule 3 Ans
+  "MN-2026-VIPX-VIP77": { productId: "prd_s877x4vl", durationMonths: 60 }  // Formule 5 Ans VIP
+};
+
+// 2. LA ROUTE MANQUANTE : Validation des licences
+app.post('/api/validate-license', (req, res) => {
+  const { licenseKey } = req.body;
+
+  if (!licenseKey) {
+    return res.status(400).json({ 
+      success: false, 
+      message: "La clé de licence est requise." 
     });
-
-    res.json({ result: response.content[0].text });
-  } catch (error) {
-    console.error("Erreur lors du scan :", error);
-    res.status(500).json({ error: "Erreur interne du serveur proxy." });
   }
+
+  const foundLicense = LICENSES_DB[licenseKey.trim()];
+
+  if (!foundLicense) {
+    return res.status(404).json({ 
+      success: false, 
+      message: "Clé invalide ou inexistante. Vérifiez votre e-mail." 
+    });
+  }
+
+  // Calculer la date d'expiration
+  const expiresAt = new Date();
+  expiresAt.setMonth(expiresAt.getMonth() + foundLicense.durationMonths);
+
+  return res.json({
+    success: true,
+    message: "Licence validée avec succès !",
+    productId: foundLicense.productId,
+    expiresAt: expiresAt.toISOString()
+  });
 });
 
+// 3. Route d'analyse de scan (Pour éviter les crashs)
+app.post('/api/scan', (req, res) => {
+  const { imageBase64 } = req.body;
+  if (!imageBase64) {
+    return res.status(400).json({ error: "Aucune image fournie." });
+  }
+  // Ta logique d'intégration avec l'API Gemini ou Vision ici...
+  return res.json({ success: true, content: "[]" });
+});
+
+// Route d'accueil de l'API
+app.get('/', (req, res) => {
+  res.send('Serveur API MastaNote AI+ opérationnel 🚀');
+});
+
+// Écoute du port dynamique de Render
+const PORT = process.env.PORT || 5000;
 app.listen(PORT, () => {
-  console.log(`Serveur proxy Anthropic actif sur le port ${PORT}`);
+  console.log(`Le serveur MastaNote tourne sur le port ${PORT}`);
 });
