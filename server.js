@@ -6,7 +6,7 @@ const app = express();
 // Autorise votre frontend à appeler ce backend.
 // En production, remplacez '*' par l'URL exacte de votre frontend
 // (ex: 'https://mastanote-ai.onrender.com') pour plus de sécurité.
-app.use(cors({ origin: 'https://mastanote-ai.onrender.com' }))
+app.use(cors({ origin: '*' }));
 
 // Les images encodées en base64 peuvent facilement dépasser la limite
 // par défaut d'Express (100kb) — on l'augmente à 15 Mo.
@@ -50,7 +50,7 @@ app.post('/api/scan', async (req, res) => {
         'anthropic-version': '2023-06-01'
       },
       body: JSON.stringify({
-        model: 'claude-3-5-sonnet-latest',
+        model: 'claude-sonnet-4-6',
         max_tokens: 1000,
         messages: [
           {
