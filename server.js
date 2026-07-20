@@ -24,6 +24,7 @@ app.get('/', (req, res) => {
 
 // ==================================================================
 // SCANNER IA — proxy sécurisé vers l'API Anthropic (clé jamais exposée)
+// Appelé par SCAN_API_URL dans App.tsx : https://.../api/scan
 // ==================================================================
 app.post('/api/scan', async (req, res) => {
   try {
@@ -93,10 +94,12 @@ app.post('/api/scan', async (req, res) => {
 
 // ==================================================================
 // VALIDATION DE LICENCE — intégration réelle de l'API Chariow
+// Appelé par LICENSE_API_URL dans App.tsx : https://.../api/validate-license
+//
 // Contrat vérifié contre la documentation officielle (chariow.dev) :
-//   GET  /v1/licenses/{licenseKey}              → détails + statut
-//   POST /v1/licenses/{licenseKey}/activate      → active sur un appareil
-// Réponses Chariow au format { message, data, errors }.
+//   GET  /v1/licenses/{licenseKey}          → détails + statut de la licence
+//   POST /v1/licenses/{licenseKey}/activate → active la licence sur un appareil
+// Toutes les réponses Chariow suivent le format { message, data, errors }.
 // ==================================================================
 app.post('/api/validate-license', async (req, res) => {
   try {
@@ -124,7 +127,6 @@ app.post('/api/validate-license', async (req, res) => {
     });
 
     if (!licenseResponse.ok) {
-      // 404 ou clé mal formée côté Chariow
       return res.status(200).json({
         success: false,
         message: 'Clé de licence introuvable. Vérifiez votre e-mail de confirmation Chariow.'
@@ -147,9 +149,9 @@ app.post('/api/validate-license', async (req, res) => {
     }
 
     // --- 3. Si pas encore active mais activable, on l'active sur cet "appareil" ---
-    // (l'application étant une PWA web, on utilise un identifiant logique fixe
-    // plutôt qu'une empreinte matérielle — chaque enseignant active sa licence
-    // une seule fois lors de sa première saisie de clé).
+    // L'application étant une PWA web (pas d'appareil physique unique fiable),
+    // on utilise un identifiant logique fixe. Chaque enseignant n'active sa
+    // licence qu'une seule fois, lors de sa toute première saisie de clé.
     if (!license.is_active) {
       if (!license.can_activate) {
         return res.status(200).json({
