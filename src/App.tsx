@@ -47,8 +47,8 @@ const ABONNEMENT_PLANS = [
   }
 ];
 
-const SCAN_API_URL = 'https://mastanote-backend.onrender.com/api/scan';
-const LICENSE_API_URL = 'https://mastanote-backend.onrender.com/api/validate-license';
+const SCAN_API_URL = 'https://mastanote-backend-j9hh.onrender.com/api/scan';
+const LICENSE_API_URL = 'https://mastanote-backend-j9hh.onrender.com/api/validate-license';
 const FICHES_PEDAGOGIQUES_URL = 'https://votre-espace-de-stockage-fiches.com/ressources';
 
 const ELEVES_INITIAL_CM2 = [
