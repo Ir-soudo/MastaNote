@@ -547,9 +547,9 @@ export default function App() {
     }
 
     let csvContent = "Matricule,Nom,Prénoms";
-    MATIERES_PRIMAIRE.forEach(m => { csvContent += `,${m.label},`; });
-    csvContent += "\n,,";
-    MATIERES_PRIMAIRE.forEach(() => { csvContent += ",Note obtenue,Note perfectionnement"; });
+    MATIERES_PRIMAIRE.forEach(m => {
+      csvContent += `,${escapeCsv(m.label + ' - Note')},${escapeCsv(m.label + ' - Perfectionnement')}`;
+    });
     csvContent += "\n";
 
     activeClass.eleves.forEach(el => {
