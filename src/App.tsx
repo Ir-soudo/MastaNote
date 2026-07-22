@@ -47,8 +47,8 @@ const ABONNEMENT_PLANS = [
   }
 ];
 
-const SCAN_API_URL = 'https://mastanote-backend.onrender.com/api/scan';
-const LICENSE_API_URL = 'https://mastanote-backend.onrender.com/api/validate-license';
+const SCAN_API_URL = 'https://mastanote-backend-j9hh.onrender.com/api/scan';
+const LICENSE_API_URL = 'https://mastanote-backend-j9hh.onrender.com/api/validate-license';
 const FICHES_PEDAGOGIQUES_URL = 'https://votre-espace-de-stockage-fiches.com/ressources';
 
 const ELEVES_INITIAL_CM2 = [
@@ -547,9 +547,9 @@ export default function App() {
     }
 
     let csvContent = "Matricule,Nom,Prénoms";
-    MATIERES_PRIMAIRE.forEach(m => { csvContent += `,${m.label},`; });
-    csvContent += "\n,,";
-    MATIERES_PRIMAIRE.forEach(() => { csvContent += ",Note obtenue,Note perfectionnement"; });
+    MATIERES_PRIMAIRE.forEach(m => {
+      csvContent += `,${escapeCsv(m.label + ' - Note')},${escapeCsv(m.label + ' - Perfectionnement')}`;
+    });
     csvContent += "\n";
 
     activeClass.eleves.forEach(el => {
