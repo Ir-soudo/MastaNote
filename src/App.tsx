@@ -21,6 +21,20 @@ const MATIERES_PRIMAIRE = [
   { id: 'eps', label: 'EPS (Edu. Phys. & Sportive)', short: 'EPS' }
 ];
 
+// Noms de colonnes EXACTS attendus par le modèle officiel EducMaster
+// (confirmé sur un vrai fichier EducMaster fourni par l'enseignant)
+const EDUCMASTER_COLUMN_NAMES = {
+  dictee: 'Dictée',
+  maths: 'Math',
+  expression_ecrite: 'Expresion écrite',
+  comprehension: "Compréhension de l'écrit",
+  est: 'EST',
+  es: 'ES',
+  ea_oral: 'EA (Oral)',
+  ea_dessin: 'EA (Déssin/Couture)',
+  eps: 'EPS'
+};
+
 const CLASSES_PRIMAIRE = ['CI', 'CP', 'CE1', 'CE2', 'CM1', 'CM2'];
 
 const ABONNEMENT_PLANS = [
@@ -47,9 +61,10 @@ const ABONNEMENT_PLANS = [
   }
 ];
 
-const SCAN_API_URL = 'https://mastanote-backend-j9hh.onrender.com/api/scan';
-const LICENSE_API_URL = 'https://mastanote-backend-j9hh.onrender.com/api/validate-license';
+const SCAN_API_URL = 'https://mastanote-backend.onrender.com/api/scan';
+const LICENSE_API_URL = 'https://mastanote-backend.onrender.com/api/validate-license';
 const FICHES_PEDAGOGIQUES_URL = 'https://votre-espace-de-stockage-fiches.com/ressources';
+const BOUTIQUE_URL = 'https://xjqdkqwz.mychariow.shop';
 
 const ELEVES_INITIAL_CM2 = [
   { id: '1', matricule: '24-CM2-001', nom: 'ABALO', prenoms: 'Sena Jean' },
@@ -62,27 +77,12 @@ const ELEVES_INITIAL_CM2 = [
   { id: '8', matricule: '24-CM2-008', nom: 'ADANZAN', prenoms: 'Sèmèvo Pierre' }
 ];
 
-// --- PERSISTANCE LOCALE (localStorage) ---
-// Clé unique versionnée : si un jour la structure des données change,
-// on peut incrémenter "v1" pour éviter de charger un format obsolète.
-const STORAGE_KEY = 'mastanote-ai-state-v1';
-
-const loadPersistedState = () => {
-  try {
-    const raw = localStorage.getItem(STORAGE_KEY);
-    if (!raw) return null;
-    return JSON.parse(raw);
-  } catch (err) {
-    console.error("Impossible de lire les données sauvegardées :", err);
-    return null;
-  }
-};
-
 export default function App() {
-  const persisted = loadPersistedState();
+  // --- ÉTAT LANDING PAGE ---
+  const [hasEnteredApp, setHasEnteredApp] = useState(false);
 
   // --- ÉTATS ---
-  const [user, setUser] = useState(persisted?.user || {
+  const [user, setUser] = useState({
     nom: 'Enseignant Bénin',
     tel: '0197000000',
     statut_abonnement: 'demo',
@@ -91,14 +91,14 @@ export default function App() {
     expireLe: null
   });
 
-  const [classes, setClasses] = useState(persisted?.classes || [
+  const [classes, setClasses] = useState([
     { id: 'class-1', nom: 'CM2 Émeraude', niveau: 'CM2', eleves: ELEVES_INITIAL_CM2 }
   ]);
   const [selectedClassId, setSelectedClassId] = useState('class-1');
   const [activeTab, setActiveTab] = useState('dashboard');
   const [activeMatiere, setActiveMatiere] = useState('maths');
 
-  const [notes, setNotes] = useState(persisted?.notes || {
+  const [notes, setNotes] = useState({
     'class-1': {
       'maths': {
         '1': { note: 14, perf: 15 }, '2': { note: 8.5, perf: 10 }, '3': { note: 16, perf: 16 },
@@ -109,19 +109,6 @@ export default function App() {
       }
     }
   });
-
-  // Sauvegarde automatique à chaque changement de classes/notes/user.
-  // Un debounce léger (300ms) évite d'écrire à chaque frappe de clavier.
-  useEffect(() => {
-    const timer = setTimeout(() => {
-      try {
-        localStorage.setItem(STORAGE_KEY, JSON.stringify({ user, classes, notes }));
-      } catch (err) {
-        console.error("Impossible de sauvegarder les données :", err);
-      }
-    }, 300);
-    return () => clearTimeout(timer);
-  }, [user, classes, notes]);
 
   const [currentSaisieIndex, setCurrentSaisieIndex] = useState(0);
   const [tempNote, setTempNote] = useState('');
@@ -164,7 +151,6 @@ export default function App() {
     setTimeout(() => setNotif(null), 4000);
   };
 
-  // --- DÉTECTION D'UNE NOUVELLE VERSION DE L'APPLICATION (PWA) ---
   useEffect(() => {
     const handleUpdateAvailable = (e) => {
       setUpdateInfo({ activateUpdate: e.detail.activateUpdate });
@@ -173,7 +159,6 @@ export default function App() {
     return () => window.removeEventListener('mastanote-update-available', handleUpdateAvailable);
   }, []);
 
-  // --- INITIALISATION DE L'API VOCALE ---
   useEffect(() => {
     const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
     if (!SpeechRecognition) return undefined;
@@ -546,17 +531,31 @@ export default function App() {
       return;
     }
 
-    let csvContent = "Matricule,Nom,Prénoms";
+    // Ligne 1 : Matricule,Nom,Prénoms, puis chaque matière suivie d'une case vide
+    let row1 = "Matricule,Nom,Prénoms";
     MATIERES_PRIMAIRE.forEach(m => {
-      csvContent += `,${escapeCsv(m.label + ' - Note')},${escapeCsv(m.label + ' - Perfectionnement')}`;
+      const label = EDUCMASTER_COLUMN_NAMES[m.id] || m.label;
+      row1 += `,${escapeCsv(label)},`;
     });
-    csvContent += "\n";
+
+    // Ligne 2 : cases vides pour Matricule/Nom/Prénoms, puis Note obtenue/Perfectionnement par matière
+    let row2 = ",,";
+    MATIERES_PRIMAIRE.forEach(() => {
+      row2 += ",Note obtenue,Note perfectionnement";
+    });
+
+    let csvContent = row1 + "\n" + row2 + "\n";
 
     activeClass.eleves.forEach(el => {
-      let row = `${escapeCsv(el.matricule)},${escapeCsv(el.nom)},${escapeCsv(el.prenoms)}`;
+      // Le matricule est préfixé d'une apostrophe pour forcer Excel à le traiter
+      // comme du texte (évite la troncature / notation scientifique des longs identifiants numériques)
+      let row = `${escapeCsv("'" + el.matricule)},${escapeCsv(el.nom)},${escapeCsv(el.prenoms)}`;
+
       MATIERES_PRIMAIRE.forEach(m => {
         const studentNote = notes[selectedClassId]?.[m.id]?.[el.id] || {};
-        row += `,${studentNote.note !== undefined ? studentNote.note : ""},${studentNote.perf !== undefined ? studentNote.perf : ""}`;
+        const nObtenu = studentNote.note !== undefined ? studentNote.note : "";
+        const nPerf = studentNote.perf !== undefined ? studentNote.perf : "";
+        row += `,${nObtenu},${nPerf}`;
       });
       csvContent += row + "\n";
     });
@@ -800,6 +799,161 @@ Utilise null pour perf si elle n'est pas visible sur la feuille. Si tu ne peux p
     window.open(FICHES_PEDAGOGIQUES_URL, '_blank', 'noopener,noreferrer');
   };
 
+  // ==========================================================
+  // LANDING PAGE (affichée avant l'entrée dans le tableau de bord)
+  // ==========================================================
+  if (!hasEnteredApp) {
+    return (
+      <div className="min-h-screen bg-slate-900 text-slate-100 font-sans overflow-x-hidden">
+
+        <section className="relative px-4 pt-10 pb-16 sm:pt-16 sm:pb-24 overflow-hidden">
+          <div className="absolute top-0 left-1/2 -translate-x-1/2 w-[600px] h-[600px] bg-indigo-600/20 rounded-full blur-3xl pointer-events-none" />
+          <div className="absolute bottom-0 right-0 w-[400px] h-[400px] bg-purple-600/10 rounded-full blur-3xl pointer-events-none" />
+
+          <div className="max-w-4xl mx-auto text-center relative z-10 space-y-6">
+            <div className="inline-flex items-center gap-2 bg-indigo-500/10 border border-indigo-500/30 text-indigo-300 text-xs font-bold px-4 py-1.5 rounded-full uppercase tracking-wider">
+              <Sparkles className="w-3.5 h-3.5" />
+              Spécial Enseignants du Primaire — Bénin
+            </div>
+
+            <h1 className="text-4xl sm:text-6xl font-black tracking-tight leading-tight">
+              <span className="bg-gradient-to-r from-white via-slate-200 to-indigo-400 bg-clip-text text-transparent">
+                Gagnez des heures
+              </span>
+              <br />
+              <span className="bg-gradient-to-r from-indigo-400 via-purple-400 to-amber-400 bg-clip-text text-transparent">
+                sur la gestion de vos notes
+              </span>
+            </h1>
+
+            <p className="text-slate-400 text-base sm:text-lg max-w-2xl mx-auto leading-relaxed">
+              MastaNote AI+ transforme la saisie des notes en un jeu d'enfant : dictez vos notes à voix haute,
+              scannez une feuille manuscrite, ou importez directement votre fichier EducMaster — puis exportez
+              en un clic, au format exact accepté par la plateforme officielle.
+            </p>
+
+            <div className="flex flex-col sm:flex-row items-center justify-center gap-3 pt-4">
+              <button
+                onClick={() => setHasEnteredApp(true)}
+                className="w-full sm:w-auto bg-gradient-to-r from-indigo-600 to-purple-600 hover:opacity-95 text-white font-bold text-base px-8 py-4 rounded-2xl shadow-2xl shadow-indigo-900/40 flex items-center justify-center gap-2 transition-all"
+              >
+                <BookOpen className="w-5 h-5" />
+                Accéder à l'application
+              </button>
+              <a
+                href={BOUTIQUE_URL}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="w-full sm:w-auto bg-slate-800/80 hover:bg-slate-800 border border-slate-700 text-white font-bold text-base px-8 py-4 rounded-2xl flex items-center justify-center gap-2 transition-all"
+              >
+                <Library className="w-5 h-5" />
+                Découvrir nos fiches pédagogiques
+              </a>
+            </div>
+
+            <p className="text-xs text-slate-500 pt-2">Aucune carte bancaire requise pour commencer — testez gratuitement.</p>
+          </div>
+        </section>
+
+        <section className="px-4 pb-16">
+          <div className="max-w-5xl mx-auto">
+            <h2 className="text-center text-2xl sm:text-3xl font-black text-white mb-2">Tout ce qu'il vous faut, en une seule app</h2>
+            <p className="text-center text-slate-400 text-sm mb-10 max-w-xl mx-auto">Conçue spécifiquement pour le format EducMaster Bénin, du CI au CM2.</p>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5">
+              {[
+                { icon: Mic, title: 'Saisie Vocale IA', desc: "Dictez vos notes à voix haute, sans jamais toucher le clavier.", bg: 'bg-indigo-500/10', text: 'text-indigo-400' },
+                { icon: Camera, title: 'Scanner Intelligent', desc: "Photographiez une feuille manuscrite : l'IA remplit vos notes automatiquement.", bg: 'bg-purple-500/10', text: 'text-purple-400' },
+                { icon: Upload, title: 'Import EducMaster', desc: "Importez votre liste d'élèves (CSV, Excel) en un clic, sans ressaisie.", bg: 'bg-violet-500/10', text: 'text-violet-400' },
+                { icon: Download, title: 'Export 100% Compatible', desc: "Générez le fichier exact accepté par le portail officiel EducMaster.", bg: 'bg-emerald-500/10', text: 'text-emerald-400' }
+              ].map((feat, i) => (
+                <div key={i} className="bg-slate-950 border border-slate-800/80 rounded-2xl p-5 hover:border-indigo-500/40 transition-colors">
+                  <div className={`inline-flex p-3 rounded-xl mb-4 ${feat.bg} ${feat.text}`}>
+                    <feat.icon className="w-6 h-6" />
+                  </div>
+                  <h3 className="font-bold text-white text-sm mb-1.5">{feat.title}</h3>
+                  <p className="text-xs text-slate-400 leading-relaxed">{feat.desc}</p>
+                </div>
+              ))}
+            </div>
+          </div>
+        </section>
+
+        <section className="px-4 pb-20">
+          <div className="max-w-5xl mx-auto">
+            <h2 className="text-center text-2xl sm:text-3xl font-black text-white mb-2">Des formules pensées pour les enseignants</h2>
+            <p className="text-center text-slate-400 text-sm mb-10">Paiement sécurisé via Chariow — activez votre licence en quelques secondes.</p>
+
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
+              {ABONNEMENT_PLANS.map(plan => (
+                <div
+                  key={plan.id}
+                  className={`relative rounded-2xl p-6 border flex flex-col ${
+                    plan.premiumFiches
+                      ? 'bg-amber-500/5 border-amber-500/40 ring-1 ring-amber-500/20'
+                      : 'bg-slate-950 border-slate-800'
+                  }`}
+                >
+                  {plan.premiumFiches && (
+                    <span className="absolute -top-3 right-5 bg-amber-500 text-slate-950 text-[10px] font-black uppercase px-2.5 py-1 rounded-full">
+                      Meilleur choix
+                    </span>
+                  )}
+                  <span className="text-xs font-bold text-slate-400 uppercase tracking-wider">{plan.tagline}</span>
+                  <p className={`text-3xl font-black mt-2 ${plan.premiumFiches ? 'text-amber-400' : 'text-white'}`}>
+                    {plan.prix.toLocaleString('fr-FR')} F
+                    <span className="text-xs font-medium text-slate-500"> / {plan.label}</span>
+                  </p>
+                  <ul className="text-xs text-slate-300 space-y-2 mt-5 mb-6 flex-1">
+                    {plan.avantages.map((av, i) => (
+                      <li key={i} className="flex items-start gap-1.5">
+                        <Check className="w-3.5 h-3.5 text-emerald-400 shrink-0 mt-0.5" />
+                        <span>{av}</span>
+                      </li>
+                    ))}
+                  </ul>
+                  <button
+                    onClick={() => setHasEnteredApp(true)}
+                    className={`text-center text-sm font-bold py-3 rounded-xl transition-all ${
+                      plan.premiumFiches
+                        ? 'bg-gradient-to-r from-amber-500 to-orange-500 text-slate-950 hover:opacity-95'
+                        : 'bg-indigo-600 hover:bg-indigo-700 text-white'
+                    }`}
+                  >
+                    Commencer
+                  </button>
+                </div>
+              ))}
+            </div>
+          </div>
+        </section>
+
+        <section className="px-4 pb-16">
+          <div className="max-w-3xl mx-auto bg-gradient-to-br from-indigo-950 via-slate-900 to-slate-950 border border-indigo-500/20 rounded-3xl p-8 sm:p-12 text-center shadow-2xl">
+            <h2 className="text-2xl sm:text-3xl font-black text-white mb-3">Prêt à simplifier votre quotidien ?</h2>
+            <p className="text-slate-400 text-sm mb-8 max-w-lg mx-auto">
+              Rejoignez les enseignants qui ont déjà transformé leur gestion des notes avec MastaNote AI+.
+            </p>
+            <button
+              onClick={() => setHasEnteredApp(true)}
+              className="bg-gradient-to-r from-indigo-600 to-purple-600 hover:opacity-95 text-white font-bold text-base px-8 py-4 rounded-2xl shadow-xl shadow-indigo-900/30 inline-flex items-center gap-2 transition-all"
+            >
+              <BookOpen className="w-5 h-5" />
+              Lancer MastaNote AI+
+            </button>
+          </div>
+        </section>
+
+        <footer className="px-4 py-6 text-center text-xs text-slate-500 border-t border-slate-800/80">
+          © 2026 MastaNote AI+ - Spécial Primaire Bénin (CI à CM2). Tous droits réservés.
+        </footer>
+      </div>
+    );
+  }
+
+  // ==========================================================
+  // TABLEAU DE BORD PRINCIPAL
+  // ==========================================================
   return (
     <div className="min-h-screen bg-slate-900 text-slate-100 flex flex-col font-sans selection:bg-indigo-500 selection:text-white">
 
@@ -836,9 +990,13 @@ Utilise null pour perf si elle n'est pas visible sur la feuille. Si tu ne peux p
       <header className="bg-slate-950 border-b border-slate-800 sticky top-0 z-40 px-4 py-3 shadow-lg">
         <div className="max-w-6xl mx-auto flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <div className="bg-gradient-to-tr from-indigo-600 to-purple-600 p-2.5 rounded-xl shadow-md shadow-indigo-900/30">
+            <button
+              onClick={() => setHasEnteredApp(false)}
+              className="bg-gradient-to-tr from-indigo-600 to-purple-600 p-2.5 rounded-xl shadow-md shadow-indigo-900/30"
+              title="Retour à l'accueil"
+            >
               <BookOpen className="w-6 h-6 text-white" />
-            </div>
+            </button>
             <div>
               <div className="flex items-center gap-1.5">
                 <h1 className="font-bold text-lg tracking-tight bg-gradient-to-r from-white via-slate-200 to-indigo-400 bg-clip-text text-transparent">
@@ -865,13 +1023,15 @@ Utilise null pour perf si elle n'est pas visible sur la feuille. Si tu ne peux p
             )}
 
             {user.statut_abonnement === 'demo' ? (
-              <button
-                onClick={() => setPaywallModal(true)}
+              <a
+                href={BOUTIQUE_URL}
+                target="_blank"
+                rel="noopener noreferrer"
                 className="bg-gradient-to-r from-amber-500 to-orange-500 text-slate-950 font-bold text-xs px-3.5 py-2 rounded-xl flex items-center gap-1.5 hover:opacity-95 transition-all shadow-lg shadow-orange-500/10"
               >
-                <Lock className="w-3.5 h-3.5" />
-                Débloquer l'Export
-              </button>
+                <Download className="w-3.5 h-3.5" />
+                Télécharger Vos Fiches
+              </a>
             ) : (
               <span className="bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 text-xs px-3 py-1.5 rounded-xl flex items-center gap-1.5 font-medium">
                 <span className="w-2.5 h-2.5 rounded-full bg-emerald-400 animate-pulse" />
@@ -1570,7 +1730,9 @@ Utilise null pour perf si elle n'est pas visible sur la feuille. Si tu ne peux p
                                 onClick={() => handleDeleteStudent(el.id)}
                                 className="p-1.5 bg-rose-500/10 border border-rose-500/20 text-rose-400 rounded-lg hover:bg-rose-500/20 transition-colors"
                                 title="Retirer cet élève"
-                              ><Trash2 className="w-4 h-4" /></button>
+                              >
+                                <Trash2 className="w-4 h-4" />
+                              </button>
                             </td>
                           </tr>
                         ))}
@@ -1646,7 +1808,6 @@ Utilise null pour perf si elle n'est pas visible sur la feuille. Si tu ne peux p
               <button
                 onClick={() => {
                   if (confirm("Voulez-vous vraiment réinitialiser l'application ? Cette action est irréversible.")) {
-                    localStorage.removeItem(STORAGE_KEY);
                     setClasses([{ id: 'class-1', nom: 'CM2 Émeraude', niveau: 'CM2', eleves: ELEVES_INITIAL_CM2 }]);
                     setNotes({});
                     setSelectedClassId('class-1');
