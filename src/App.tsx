@@ -61,9 +61,9 @@ const ABONNEMENT_PLANS = [
   }
 ];
 
-const SCAN_API_URL = 'https://mastanote-backend.onrender.com/api/scan';
-const LICENSE_API_URL = 'https://mastanote-backend.onrender.com/api/validate-license';
-const FICHES_PEDAGOGIQUES_URL = 'https://votre-espace-de-stockage-fiches.com/ressources';
+const SCAN_API_URL = 'https://mastanote-backend-j9hh.onrender.com/api/scan';
+const LICENSE_API_URL = 'https://mastanote-backend-j9hh.onrender.com/api/validate-license';
+const FICHES_PEDAGOGIQUES_URL = 'https://soudoboutik-ebook.mychariow.shop';
 const BOUTIQUE_URL = 'https://xjqdkqwz.mychariow.shop';
 
 const ELEVES_INITIAL_CM2 = [
@@ -1011,28 +1011,16 @@ Utilise null pour perf si elle n'est pas visible sur la feuille. Si tu ne peux p
           </div>
 
           <div className="flex items-center gap-2">
-            {isPremiumPlan && (
-              <button
-                onClick={handleOpenFiches}
-                className="hidden sm:flex bg-amber-500/10 border border-amber-500/30 text-amber-400 text-xs px-3 py-1.5 rounded-xl items-center gap-1.5 font-semibold hover:bg-amber-500/20 transition-colors"
-                title="Bibliothèque de fiches pédagogiques (VIP)"
-              >
-                <Library className="w-3.5 h-3.5" />
-                Fiches VIP
-              </button>
-            )}
+            <button
+              onClick={handleOpenFiches}
+              className="bg-gradient-to-r from-amber-500 to-orange-500 text-slate-950 font-bold text-xs px-3.5 py-2 rounded-xl flex items-center gap-1.5 hover:opacity-95 transition-all shadow-lg shadow-orange-500/10"
+              title={isPremiumPlan ? "Ouvrir votre bibliothèque de fiches" : "Réservé à la formule 5 Ans VIP"}
+            >
+              <Download className="w-3.5 h-3.5" />
+              Télécharger Vos Fiches
+            </button>
 
-            {user.statut_abonnement === 'demo' ? (
-              <a
-                href={BOUTIQUE_URL}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="bg-gradient-to-r from-amber-500 to-orange-500 text-slate-950 font-bold text-xs px-3.5 py-2 rounded-xl flex items-center gap-1.5 hover:opacity-95 transition-all shadow-lg shadow-orange-500/10"
-              >
-                <Download className="w-3.5 h-3.5" />
-                Télécharger Vos Fiches
-              </a>
-            ) : (
+            {user.statut_abonnement !== 'demo' && (
               <span className="bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 text-xs px-3 py-1.5 rounded-xl flex items-center gap-1.5 font-medium">
                 <span className="w-2.5 h-2.5 rounded-full bg-emerald-400 animate-pulse" />
                 Premium ({user.plan})
