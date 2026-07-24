@@ -532,44 +532,58 @@ export default function App() {
     }
 
     // Ligne 1 : Matricule,Nom,Prénoms, puis chaque matière suivie d'une case vide
-    let row1 = "Matricule,Nom,Prénoms";
+    const row1 = ['Matricule', 'Nom', 'Prénoms'];
     MATIERES_PRIMAIRE.forEach(m => {
       const label = EDUCMASTER_COLUMN_NAMES[m.id] || m.label;
-      row1 += `,${escapeCsv(label)},`;
+      row1.push(label, '');
     });
 
     // Ligne 2 : cases vides pour Matricule/Nom/Prénoms, puis Note obtenue/Perfectionnement par matière
-    let row2 = ",,";
+    const row2 = ['', '', ''];
     MATIERES_PRIMAIRE.forEach(() => {
-      row2 += ",Note obtenue,Note perfectionnement";
+      row2.push('Note obtenue', 'Note perfectionnement');
     });
 
-    let csvContent = row1 + "\n" + row2 + "\n";
+    const rows = [row1, row2];
 
     activeClass.eleves.forEach(el => {
-      // Le matricule est préfixé d'une apostrophe pour forcer Excel à le traiter
-      // comme du texte (évite la troncature / notation scientifique des longs identifiants numériques)
-      let row = `${escapeCsv("'" + el.matricule)},${escapeCsv(el.nom)},${escapeCsv(el.prenoms)}`;
-
+      const row = [el.matricule, el.nom, el.prenoms];
       MATIERES_PRIMAIRE.forEach(m => {
         const studentNote = notes[selectedClassId]?.[m.id]?.[el.id] || {};
-        const nObtenu = studentNote.note !== undefined ? studentNote.note : "";
-        const nPerf = studentNote.perf !== undefined ? studentNote.perf : "";
-        row += `,${nObtenu},${nPerf}`;
+        row.push(studentNote.note !== undefined ? studentNote.note : '');
+        row.push(studentNote.perf !== undefined ? studentNote.perf : '');
       });
-      csvContent += row + "\n";
+      rows.push(row);
     });
 
-    const blob = new Blob(["\ufeff" + csvContent], { type: 'text/csv;charset=utf-8;' });
+    const worksheet = XLSX.utils.aoa_to_sheet(rows);
+
+    // Force explicitement la colonne Matricule (colonne A) en texte pour chaque élève,
+    // afin qu'Excel ne tronque jamais les longs identifiants numériques ni ne les
+    // convertisse en notation scientifique — plus fiable que l'astuce de l'apostrophe.
+    for (let r = 2; r < rows.length; r++) {
+      const cellRef = XLSX.utils.encode_cell({ r, c: 0 });
+      if (worksheet[cellRef]) {
+        worksheet[cellRef].t = 's';
+        worksheet[cellRef].z = '@';
+      }
+    }
+
+    const workbook = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(workbook, worksheet, 'Import_Notes');
+
+    const wbout = XLSX.write(workbook, { bookType: 'xlsx', type: 'array' });
+    const blob = new Blob([wbout], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
     const url = URL.createObjectURL(blob);
     const link = document.createElement("a");
     link.setAttribute("href", url);
-    link.setAttribute("download", `EducMaster_Notes_${activeClass.nom.replace(/\s+/g, '_')}_Import.csv`);
+    link.setAttribute("download", `EducMaster_Notes_${activeClass.nom.replace(/\s+/g, '_')}_Import.xlsx`);
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
+    URL.revokeObjectURL(url);
 
-    triggerNotif("Fichier d'importation EducMaster généré avec succès !", 'success');
+    triggerNotif("Fichier Excel (.xlsx) EducMaster généré avec succès !", 'success');
   };
 
   const computeExpirationLabel = (isoDateString, dureeMoisFallback) => {
@@ -1263,7 +1277,7 @@ Utilise null pour perf si elle n'est pas visible sur la feuille. Si tu ne peux p
                   </button>
                   <button onClick={exportToEducMaster} className="bg-gradient-to-r from-emerald-500 to-teal-500 text-slate-950 font-black text-sm px-5 py-3 rounded-xl flex items-center justify-center gap-2 transition-all shadow-lg shadow-emerald-500/10">
                     <Download className="w-4 h-4" />
-                    Exporter EducMaster (.csv)
+                    Exporter EducMaster (.xlsx)
                   </button>
                 </div>
               </div>
