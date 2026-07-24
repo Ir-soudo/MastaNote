@@ -841,7 +841,7 @@ Utilise null pour perf si elle n'est pas visible sur la feuille. Si tu ne peux p
                 Accéder à l'application
               </button>
               <a
-                href={BOUTIQUE_URL}
+                href={ABONNEMENT_PLANS.find(p => p.id === '5ans')?.chariowCheckoutUrl || BOUTIQUE_URL}
                 target="_blank"
                 rel="noopener noreferrer"
                 className="w-full sm:w-auto bg-slate-800/80 hover:bg-slate-800 border border-slate-700 text-white font-bold text-base px-8 py-4 rounded-2xl flex items-center justify-center gap-2 transition-all"
