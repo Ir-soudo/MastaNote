@@ -139,10 +139,31 @@ export default function App() {
   const [scanErrorMsg, setScanErrorMsg] = useState('');
   const [scanProgressMsg, setScanProgressMsg] = useState('');
 
+  // --- ÉTATS POUR L'ENRÔLEMENT DE NOUVEAUX ÉLÈVES ---
+  const [enrolements, setEnrolements] = useState([]);
+  const [enrolNom, setEnrolNom] = useState('');
+  const [enrolPrenoms, setEnrolPrenoms] = useState('');
+  const [enrolSexe, setEnrolSexe] = useState('M');
+  const [enrolNationalite, setEnrolNationalite] = useState('Béninoise');
+  const [enrolDateNaissance, setEnrolDateNaissance] = useState('');
+  const [enrolLieuNaissance, setEnrolLieuNaissance] = useState('');
+  const [enrolTelephone, setEnrolTelephone] = useState('');
+  const [enrolIsListening, setEnrolIsListening] = useState(false);
+  const [enrolVoiceField, setEnrolVoiceField] = useState(null);
+  const [enrolVoiceStatus, setEnrolVoiceStatus] = useState('');
+
+  const [enrolScanImage, setEnrolScanImage] = useState(null);
+  const [enrolScanStatus, setEnrolScanStatus] = useState('idle');
+  const [enrolScanResults, setEnrolScanResults] = useState([]);
+  const [enrolScanErrorMsg, setEnrolScanErrorMsg] = useState('');
+  const [enrolScanProgressMsg, setEnrolScanProgressMsg] = useState('');
+
   const recognitionRef = useRef(null);
   const cameraInputRef = useRef(null);
   const galleryInputRef = useRef(null);
   const importFileInputRef = useRef(null);
+  const enrolCameraInputRef = useRef(null);
+  const enrolGalleryInputRef = useRef(null);
 
   const isPremiumPlan = user.statut_abonnement === 'actif' && user.planId === '5ans';
 
@@ -532,58 +553,44 @@ export default function App() {
     }
 
     // Ligne 1 : Matricule,Nom,Prénoms, puis chaque matière suivie d'une case vide
-    const row1 = ['Matricule', 'Nom', 'Prénoms'];
+    let row1 = "Matricule,Nom,Prénoms";
     MATIERES_PRIMAIRE.forEach(m => {
       const label = EDUCMASTER_COLUMN_NAMES[m.id] || m.label;
-      row1.push(label, '');
+      row1 += `,${escapeCsv(label)},`;
     });
 
     // Ligne 2 : cases vides pour Matricule/Nom/Prénoms, puis Note obtenue/Perfectionnement par matière
-    const row2 = ['', '', ''];
+    let row2 = ",,";
     MATIERES_PRIMAIRE.forEach(() => {
-      row2.push('Note obtenue', 'Note perfectionnement');
+      row2 += ",Note obtenue,Note perfectionnement";
     });
 
-    const rows = [row1, row2];
+    let csvContent = row1 + "\n" + row2 + "\n";
 
     activeClass.eleves.forEach(el => {
-      const row = [el.matricule, el.nom, el.prenoms];
+      // Le matricule est préfixé d'une apostrophe pour forcer Excel à le traiter
+      // comme du texte (évite la troncature / notation scientifique des longs identifiants numériques)
+      let row = `${escapeCsv("'" + el.matricule)},${escapeCsv(el.nom)},${escapeCsv(el.prenoms)}`;
+
       MATIERES_PRIMAIRE.forEach(m => {
         const studentNote = notes[selectedClassId]?.[m.id]?.[el.id] || {};
-        row.push(studentNote.note !== undefined ? studentNote.note : '');
-        row.push(studentNote.perf !== undefined ? studentNote.perf : '');
+        const nObtenu = studentNote.note !== undefined ? studentNote.note : "";
+        const nPerf = studentNote.perf !== undefined ? studentNote.perf : "";
+        row += `,${nObtenu},${nPerf}`;
       });
-      rows.push(row);
+      csvContent += row + "\n";
     });
 
-    const worksheet = XLSX.utils.aoa_to_sheet(rows);
-
-    // Force explicitement la colonne Matricule (colonne A) en texte pour chaque élève,
-    // afin qu'Excel ne tronque jamais les longs identifiants numériques ni ne les
-    // convertisse en notation scientifique — plus fiable que l'astuce de l'apostrophe.
-    for (let r = 2; r < rows.length; r++) {
-      const cellRef = XLSX.utils.encode_cell({ r, c: 0 });
-      if (worksheet[cellRef]) {
-        worksheet[cellRef].t = 's';
-        worksheet[cellRef].z = '@';
-      }
-    }
-
-    const workbook = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(workbook, worksheet, 'Import_Notes');
-
-    const wbout = XLSX.write(workbook, { bookType: 'xlsx', type: 'array' });
-    const blob = new Blob([wbout], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+    const blob = new Blob(["\ufeff" + csvContent], { type: 'text/csv;charset=utf-8;' });
     const url = URL.createObjectURL(blob);
     const link = document.createElement("a");
     link.setAttribute("href", url);
-    link.setAttribute("download", `EducMaster_Notes_${activeClass.nom.replace(/\s+/g, '_')}_Import.xlsx`);
+    link.setAttribute("download", `EducMaster_Notes_${activeClass.nom.replace(/\s+/g, '_')}_Import.csv`);
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
-    URL.revokeObjectURL(url);
 
-    triggerNotif("Fichier Excel (.xlsx) EducMaster généré avec succès !", 'success');
+    triggerNotif("Fichier d'importation EducMaster généré avec succès !", 'success');
   };
 
   const computeExpirationLabel = (isoDateString, dureeMoisFallback) => {
@@ -802,6 +809,235 @@ Utilise null pour perf si elle n'est pas visible sur la feuille. Si tu ne peux p
 
     triggerNotif(`${toApply.length} note(s) enregistrée(s) pour ${MATIERES_PRIMAIRE.find(m => m.id === scanMatiere)?.label}.`, 'success');
     resetScan();
+  };
+
+  // --- SAISIE VOCALE DÉDIÉE À L'ENRÔLEMENT (champs texte, pas de chiffres) ---
+  const handleEnrolVoiceField = (field) => {
+    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+    if (!SpeechRecognition) {
+      triggerNotif("La reconnaissance vocale n'est pas supportée sur ce navigateur.", 'error');
+      return;
+    }
+    const rec = new SpeechRecognition();
+    rec.lang = 'fr-FR';
+    rec.continuous = false;
+    rec.interimResults = false;
+    rec.maxAlternatives = 1;
+
+    rec.onstart = () => {
+      setEnrolIsListening(true);
+      setEnrolVoiceField(field);
+      setEnrolVoiceStatus("Écoute active... Parlez maintenant.");
+    };
+    rec.onresult = (event) => {
+      const text = event.results[0][0].transcript.trim();
+      if (field === 'nom') {
+        setEnrolNom(text.toUpperCase());
+        setEnrolVoiceStatus(`Nom détecté : "${text}"`);
+      } else if (field === 'prenoms') {
+        setEnrolPrenoms(text);
+        setEnrolVoiceStatus(`Prénoms détectés : "${text}"`);
+      } else if (field === 'lieuNaissance') {
+        setEnrolLieuNaissance(text);
+        setEnrolVoiceStatus(`Lieu de naissance détecté : "${text}"`);
+      } else if (field === 'telephone') {
+        const digitsOnly = text.replace(/\D/g, '');
+        setEnrolTelephone(digitsOnly || text);
+        setEnrolVoiceStatus(`Téléphone détecté : "${digitsOnly || text}"`);
+      }
+    };
+    rec.onerror = () => {
+      setEnrolVoiceStatus("Une erreur est survenue lors de l'écoute.");
+      setEnrolIsListening(false);
+    };
+    rec.onend = () => {
+      setEnrolIsListening(false);
+      setEnrolVoiceField(null);
+    };
+    rec.start();
+  };
+
+  const handleAddEnrolement = (e) => {
+    if (e && e.preventDefault) e.preventDefault();
+    if (!enrolNom.trim() || !enrolPrenoms.trim()) {
+      triggerNotif("Veuillez remplir au moins le nom et le prénom.", 'error');
+      return;
+    }
+    const newCandidate = {
+      id: `enrol-${Date.now()}`,
+      nom: enrolNom.toUpperCase(),
+      prenoms: enrolPrenoms,
+      sexe: enrolSexe,
+      nationalite: enrolNationalite.trim() || 'Béninoise',
+      dateNaissance: enrolDateNaissance,
+      lieuNaissance: enrolLieuNaissance,
+      telephone: enrolTelephone
+    };
+    setEnrolements(prev => [...prev, newCandidate]);
+    setEnrolNom('');
+    setEnrolPrenoms('');
+    setEnrolSexe('M');
+    setEnrolNationalite('Béninoise');
+    setEnrolDateNaissance('');
+    setEnrolLieuNaissance('');
+    setEnrolTelephone('');
+    triggerNotif(`${newCandidate.nom} ${newCandidate.prenoms} ajouté(e) à la liste d'enrôlement.`, 'success');
+  };
+
+  const handleDeleteEnrolement = (id) => {
+    setEnrolements(prev => prev.filter(c => c.id !== id));
+    triggerNotif("Candidat retiré de la liste d'enrôlement.");
+  };
+
+  // --- SCANNER IA DÉDIÉ À L'ENRÔLEMENT (séparé du scanner de notes) ---
+  const handleEnrolScanFileSelected = (e) => {
+    const file = e.target.files?.[0];
+    e.target.value = '';
+    if (!file) return;
+    if (!file.type.startsWith('image/')) {
+      triggerNotif("Veuillez sélectionner un fichier image.", 'error');
+      return;
+    }
+    const reader = new FileReader();
+    reader.onload = () => {
+      const result = reader.result;
+      const base64 = result.split(',')[1];
+      setEnrolScanImage({ base64, mediaType: file.type, previewUrl: result });
+      setEnrolScanStatus('idle');
+      setEnrolScanResults([]);
+      setEnrolScanErrorMsg('');
+    };
+    reader.onerror = () => triggerNotif("Impossible de lire cette image.", 'error');
+    reader.readAsDataURL(file);
+  };
+
+  const resetEnrolScan = () => {
+    setEnrolScanImage(null);
+    setEnrolScanStatus('idle');
+    setEnrolScanResults([]);
+    setEnrolScanErrorMsg('');
+  };
+
+  const handleAnalyzeEnrolScan = async () => {
+    if (!enrolScanImage) return;
+    setEnrolScanStatus('analyzing');
+    setEnrolScanErrorMsg('');
+    setEnrolScanProgressMsg("Analyse en cours...");
+
+    const coldStartTimer = setTimeout(() => {
+      setEnrolScanProgressMsg("Le serveur se réveille peut-être (jusqu'à 60 secondes après une période d'inactivité)... Merci de patienter.");
+    }, 5000);
+    const controller = new AbortController();
+    const abortTimer = setTimeout(() => controller.abort(), 90000);
+
+    try {
+      const promptText = `Tu analyses la photo d'une fiche d'enrôlement scolaire manuscrite ou imprimée, utilisée au Bénin pour inscrire de nouveaux élèves du Primaire.
+Pour chaque élève identifiable sur la feuille, extrais : Nom, Prénom(s), Sexe (M ou F), Nationalité, Date de naissance (au format JJ/MM/AAAA), Lieu de naissance, Téléphone des parents.
+Réponds UNIQUEMENT avec un tableau JSON valide, sans aucun texte autour, sans balises markdown, au format exact suivant :
+[{"nom":"AFFO","prenoms":"Carina","sexe":"F","nationalite":"Béninoise","dateNaissance":"07/11/2016","lieuNaissance":"Houédogli","telephone":"151211364"}]
+Si une information est illisible ou absente, mets une chaîne vide "" pour ce champ. Si tu ne peux identifier aucune ligne avec certitude, réponds avec un tableau vide [].`;
+
+      const response = await fetch(SCAN_API_URL, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ imageBase64: enrolScanImage.base64, mediaType: enrolScanImage.mediaType, promptText }),
+        signal: controller.signal
+      });
+
+      if (!response.ok) {
+        const errData = await response.json().catch(() => ({}));
+        throw new Error(errData.error || `Erreur serveur : ${response.status}`);
+      }
+
+      const data = await response.json();
+      const textBlock = typeof data.content === 'string' ? data.content : '';
+      const clean = textBlock.replace(/```json|```/g, '').trim();
+      const parsedArr = JSON.parse(clean);
+
+      const results = (Array.isArray(parsedArr) ? parsedArr : []).map((p, idx) => ({
+        tempId: `escan-${Date.now()}-${idx}`,
+        nom: (p.nom || '').toString().toUpperCase(),
+        prenoms: (p.prenoms || '').toString(),
+        sexe: (p.sexe === 'F' || p.sexe === 'M') ? p.sexe : 'M',
+        nationalite: (p.nationalite || 'Béninoise').toString(),
+        dateNaissance: (p.dateNaissance || '').toString(),
+        lieuNaissance: (p.lieuNaissance || '').toString(),
+        telephone: (p.telephone || '').toString(),
+        include: true
+      }));
+
+      setEnrolScanResults(results);
+      setEnrolScanStatus('review');
+
+      if (results.length === 0) {
+        triggerNotif("Aucun élève n'a pu être identifié automatiquement. Vous pouvez les saisir manuellement.", 'error');
+      } else {
+        triggerNotif(`${results.length} élève(s) détecté(s). Vérifiez avant d'ajouter à la liste.`, 'success');
+      }
+    } catch (err) {
+      console.error(err);
+      setEnrolScanStatus('error');
+      if (err && err.name === 'AbortError') {
+        setEnrolScanErrorMsg("Le serveur met trop de temps à répondre. Réessayez.");
+      } else {
+        setEnrolScanErrorMsg(err?.message || "L'analyse a échoué. Vérifiez la netteté de la photo et réessayez.");
+      }
+    } finally {
+      clearTimeout(coldStartTimer);
+      clearTimeout(abortTimer);
+      setEnrolScanProgressMsg('');
+    }
+  };
+
+  const updateEnrolScanResultField = (tempId, field, value) => {
+    setEnrolScanResults(prev => prev.map(r => r.tempId === tempId ? { ...r, [field]: value } : r));
+  };
+
+  const handleApplyEnrolScanResults = () => {
+    const toApply = enrolScanResults.filter(r => r.include && r.nom.trim());
+    if (toApply.length === 0) {
+      triggerNotif("Aucun élève coché à ajouter.", 'error');
+      return;
+    }
+    const newCandidates = toApply.map(r => ({
+      id: `enrol-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+      nom: r.nom, prenoms: r.prenoms, sexe: r.sexe, nationalite: r.nationalite,
+      dateNaissance: r.dateNaissance, lieuNaissance: r.lieuNaissance, telephone: r.telephone
+    }));
+    setEnrolements(prev => [...prev, ...newCandidates]);
+    triggerNotif(`${newCandidates.length} élève(s) ajouté(s) à la liste d'enrôlement.`, 'success');
+    resetEnrolScan();
+  };
+
+  const exportEnrolementsToEducMaster = () => {
+    if (user.statut_abonnement === 'demo') {
+      setPaywallModal(true);
+      return;
+    }
+    if (enrolements.length === 0) {
+      triggerNotif("Aucun élève à enrôler dans la liste.", 'error');
+      return;
+    }
+    const rows = [
+      ['Matricule', 'Nom', 'Prénom(s)', 'Sexe', 'Nationalité', 'Date de naissance', 'Lieu de naissance', 'Téléphones parents']
+    ];
+    enrolements.forEach(c => {
+      rows.push(['', c.nom, c.prenoms, c.sexe, c.nationalite, c.dateNaissance, c.lieuNaissance, c.telephone]);
+    });
+    const worksheet = XLSX.utils.aoa_to_sheet(rows);
+    const workbook = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(workbook, worksheet, 'Enrolement');
+    const wbout = XLSX.write(workbook, { bookType: 'xlsx', type: 'array' });
+    const blob = new Blob([wbout], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.setAttribute("href", url);
+    link.setAttribute("download", `EducMaster_Enrolement_${(activeClass?.niveau || 'Classe')}_Import.xlsx`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+    triggerNotif("Fichier Excel (.xlsx) d'enrôlement généré avec succès !", 'success');
   };
 
   const handleOpenFiches = () => {
@@ -1253,6 +1489,15 @@ Utilise null pour perf si elle n'est pas visible sur la feuille. Si tu ne peux p
             <Users className="w-4 h-4" />
             Liste des Élèves ({activeClass?.eleves.length || 0})
           </button>
+          <button
+            onClick={() => setActiveTab('enrolement')}
+            className={`px-4 py-3 text-xs sm:text-sm font-semibold border-b-2 flex items-center gap-2 transition-all ${
+              activeTab === 'enrolement' ? 'border-indigo-500 text-white bg-slate-900/40' : 'border-transparent text-slate-400 hover:text-slate-200'
+            }`}
+          >
+            <Plus className="w-4 h-4 text-emerald-400" />
+            Enrôler Vos Élèves ({enrolements.length})
+          </button>
         </div>
 
         {activeTab === 'dashboard' && (
@@ -1277,7 +1522,7 @@ Utilise null pour perf si elle n'est pas visible sur la feuille. Si tu ne peux p
                   </button>
                   <button onClick={exportToEducMaster} className="bg-gradient-to-r from-emerald-500 to-teal-500 text-slate-950 font-black text-sm px-5 py-3 rounded-xl flex items-center justify-center gap-2 transition-all shadow-lg shadow-emerald-500/10">
                     <Download className="w-4 h-4" />
-                    Exporter EducMaster (.xlsx)
+                    Exporter EducMaster (.csv)
                   </button>
                 </div>
               </div>
@@ -1743,6 +1988,272 @@ Utilise null pour perf si elle n'est pas visible sur la feuille. Si tu ne peux p
                   </div>
                 )}
               </div>
+            </div>
+          </div>
+        )}
+
+        {activeTab === 'enrolement' && (
+          <div className="max-w-3xl mx-auto w-full space-y-6">
+            <div className="bg-gradient-to-tr from-emerald-950 to-slate-900 border border-emerald-500/20 rounded-3xl p-6 shadow-xl space-y-2 text-center">
+              <div className="inline-flex bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 p-3 rounded-2xl mb-1">
+                <Plus className="w-6 h-6" />
+              </div>
+              <h3 className="text-xl font-black text-white">Enrôler Vos Élèves</h3>
+              <p className="text-xs text-slate-400 max-w-md mx-auto">Inscrivez de nouveaux élèves au format exact attendu par EducMaster pour l'enrôlement (le matricule sera généré par EducMaster après validation).</p>
+            </div>
+
+            {/* --- SCANNER IA DÉDIÉ À L'ENRÔLEMENT --- */}
+            <div className="bg-slate-950 border border-slate-800/80 rounded-3xl p-5 space-y-4">
+              <h4 className="font-bold text-white text-sm flex items-center gap-2">
+                <Camera className="text-indigo-400 w-4 h-4" />
+                Scanner une fiche d'enrôlement
+              </h4>
+
+              <input ref={enrolCameraInputRef} type="file" accept="image/*" capture="environment" onChange={handleEnrolScanFileSelected} className="hidden" />
+              <input ref={enrolGalleryInputRef} type="file" accept="image/*" onChange={handleEnrolScanFileSelected} className="hidden" />
+
+              {!enrolScanImage && (
+                <div className="grid grid-cols-2 gap-3">
+                  <button onClick={() => enrolCameraInputRef.current?.click()} className="bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-sm py-3.5 rounded-2xl flex flex-col items-center justify-center gap-2 transition-colors">
+                    <Camera className="w-5 h-5" />
+                    Prendre une photo
+                  </button>
+                  <button onClick={() => enrolGalleryInputRef.current?.click()} className="bg-slate-800 hover:bg-slate-700 text-white font-bold text-sm py-3.5 rounded-2xl flex flex-col items-center justify-center gap-2 transition-colors">
+                    <ImageIcon className="w-5 h-5" />
+                    Choisir un fichier
+                  </button>
+                </div>
+              )}
+
+              {enrolScanImage && enrolScanStatus !== 'review' && (
+                <div className="space-y-3">
+                  <div className="rounded-2xl overflow-hidden border border-slate-800 bg-slate-900">
+                    <img src={enrolScanImage.previewUrl} alt="Fiche d'enrôlement à analyser" className="w-full max-h-72 object-contain" />
+                  </div>
+                  {enrolScanStatus === 'error' && (
+                    <div className="bg-rose-950/40 border border-rose-800/60 rounded-xl p-3 text-xs text-rose-300 flex items-center gap-2">
+                      <AlertTriangle className="w-4 h-4 shrink-0" />
+                      {enrolScanErrorMsg}
+                    </div>
+                  )}
+                  <div className="flex gap-3">
+                    <button onClick={resetEnrolScan} disabled={enrolScanStatus === 'analyzing'} className="flex-1 bg-slate-900 hover:bg-slate-800 border border-slate-800 text-slate-300 text-sm font-semibold py-3 rounded-xl flex items-center justify-center gap-1.5 disabled:opacity-50 transition-colors">
+                      <RotateCcw className="w-4 h-4" />
+                      Changer de photo
+                    </button>
+                    <button onClick={handleAnalyzeEnrolScan} disabled={enrolScanStatus === 'analyzing'} className="flex-2 bg-gradient-to-r from-indigo-600 to-purple-600 hover:opacity-95 text-white text-sm font-bold py-3 px-6 rounded-xl shadow-lg shadow-indigo-900/30 flex items-center justify-center gap-2 disabled:opacity-60 transition-all">
+                      {enrolScanStatus === 'analyzing' ? (
+                        <>
+                          <span className="w-4 h-4 border-2 border-white/40 border-t-white rounded-full animate-spin" />
+                          Analyse en cours...
+                        </>
+                      ) : (
+                        <>
+                          <Sparkles className="w-4 h-4" />
+                          Analyser avec l'IA
+                        </>
+                      )}
+                    </button>
+                  </div>
+                  {enrolScanStatus === 'analyzing' && enrolScanProgressMsg && (
+                    <p className="text-center text-xs text-slate-400 italic">{enrolScanProgressMsg}</p>
+                  )}
+                </div>
+              )}
+
+              {enrolScanStatus === 'review' && (
+                <div className="space-y-3">
+                  <div className="bg-indigo-950/20 border border-indigo-500/10 rounded-xl p-3 text-xs text-slate-300">
+                    Vérifiez les informations détectées avant de les ajouter à la liste.
+                  </div>
+                  <div className="overflow-x-auto rounded-xl border border-slate-800">
+                    <table className="w-full text-left text-xs text-slate-300">
+                      <thead className="bg-slate-900 text-slate-400 uppercase font-bold">
+                        <tr>
+                          <th className="px-2 py-2">✓</th>
+                          <th className="px-2 py-2">Nom</th>
+                          <th className="px-2 py-2">Prénoms</th>
+                          <th className="px-2 py-2">Sexe</th>
+                          <th className="px-2 py-2">Naissance</th>
+                          <th className="px-2 py-2">Lieu</th>
+                          <th className="px-2 py-2">Téléphone</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-800/50">
+                        {enrolScanResults.map(r => (
+                          <tr key={r.tempId} className={r.include ? '' : 'opacity-50'}>
+                            <td className="px-2 py-2">
+                              <input type="checkbox" checked={r.include} onChange={(e) => updateEnrolScanResultField(r.tempId, 'include', e.target.checked)} className="w-4 h-4 accent-indigo-500" />
+                            </td>
+                            <td className="px-2 py-2">
+                              <input value={r.nom} onChange={(e) => updateEnrolScanResultField(r.tempId, 'nom', e.target.value.toUpperCase())} className="w-20 bg-slate-950 border border-slate-800 rounded px-1.5 py-1 text-white" />
+                            </td>
+                            <td className="px-2 py-2">
+                              <input value={r.prenoms} onChange={(e) => updateEnrolScanResultField(r.tempId, 'prenoms', e.target.value)} className="w-24 bg-slate-950 border border-slate-800 rounded px-1.5 py-1 text-white" />
+                            </td>
+                            <td className="px-2 py-2">
+                              <select value={r.sexe} onChange={(e) => updateEnrolScanResultField(r.tempId, 'sexe', e.target.value)} className="bg-slate-950 border border-slate-800 rounded px-1.5 py-1 text-white">
+                                <option value="M">M</option>
+                                <option value="F">F</option>
+                              </select>
+                            </td>
+                            <td className="px-2 py-2">
+                              <input value={r.dateNaissance} onChange={(e) => updateEnrolScanResultField(r.tempId, 'dateNaissance', e.target.value)} placeholder="JJ/MM/AAAA" className="w-24 bg-slate-950 border border-slate-800 rounded px-1.5 py-1 text-white" />
+                            </td>
+                            <td className="px-2 py-2">
+                              <input value={r.lieuNaissance} onChange={(e) => updateEnrolScanResultField(r.tempId, 'lieuNaissance', e.target.value)} className="w-24 bg-slate-950 border border-slate-800 rounded px-1.5 py-1 text-white" />
+                            </td>
+                            <td className="px-2 py-2">
+                              <input value={r.telephone} onChange={(e) => updateEnrolScanResultField(r.tempId, 'telephone', e.target.value)} className="w-24 bg-slate-950 border border-slate-800 rounded px-1.5 py-1 text-white" />
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                  <div className="flex gap-3">
+                    <button onClick={resetEnrolScan} className="flex-1 bg-slate-900 hover:bg-slate-800 border border-slate-800 text-slate-300 text-sm font-semibold py-3 rounded-xl transition-colors">Annuler</button>
+                    <button onClick={handleApplyEnrolScanResults} className="flex-2 bg-gradient-to-r from-emerald-500 to-teal-500 text-slate-950 font-black text-sm py-3 px-6 rounded-xl shadow-lg shadow-emerald-500/10 hover:opacity-95 transition-all">Ajouter les élèves cochés</button>
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* --- FORMULAIRE MANUEL AVEC SAISIE VOCALE PAR CHAMP --- */}
+            <div className="bg-slate-950 border border-slate-800/80 rounded-3xl p-5 space-y-4">
+              <h4 className="font-bold text-white text-sm flex items-center gap-2">
+                <Mic className="text-indigo-400 w-4 h-4" />
+                Ajouter un élève manuellement (avec dictée vocale)
+              </h4>
+
+              {enrolVoiceStatus && (
+                <p className="text-xs text-indigo-300 bg-indigo-950/20 border border-indigo-500/10 rounded-xl px-3 py-2">{enrolVoiceStatus}</p>
+              )}
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-semibold text-slate-400 mb-1">Nom</label>
+                  <div className="flex gap-1.5">
+                    <input type="text" value={enrolNom} onChange={(e) => setEnrolNom(e.target.value)} placeholder="Nom de famille" className="flex-1 bg-slate-900 border border-slate-800 rounded-xl px-3 py-2 text-slate-200 text-sm focus:outline-none focus:border-indigo-500" />
+                    <button onClick={() => handleEnrolVoiceField('nom')} className={`p-2 rounded-xl transition-colors ${enrolIsListening && enrolVoiceField === 'nom' ? 'bg-rose-600 text-white animate-pulse' : 'bg-slate-800 hover:bg-slate-700 text-indigo-400'}`}>
+                      <Mic className="w-4 h-4" />
+                    </button>
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-semibold text-slate-400 mb-1">Prénom(s)</label>
+                  <div className="flex gap-1.5">
+                    <input type="text" value={enrolPrenoms} onChange={(e) => setEnrolPrenoms(e.target.value)} placeholder="Prénom(s)" className="flex-1 bg-slate-900 border border-slate-800 rounded-xl px-3 py-2 text-slate-200 text-sm focus:outline-none focus:border-indigo-500" />
+                    <button onClick={() => handleEnrolVoiceField('prenoms')} className={`p-2 rounded-xl transition-colors ${enrolIsListening && enrolVoiceField === 'prenoms' ? 'bg-rose-600 text-white animate-pulse' : 'bg-slate-800 hover:bg-slate-700 text-indigo-400'}`}>
+                      <Mic className="w-4 h-4" />
+                    </button>
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-semibold text-slate-400 mb-1">Sexe</label>
+                  <div className="flex gap-2">
+                    <button type="button" onClick={() => setEnrolSexe('M')} className={`flex-1 py-2 rounded-xl text-sm font-bold transition-colors ${enrolSexe === 'M' ? 'bg-indigo-600 text-white' : 'bg-slate-900 border border-slate-800 text-slate-400'}`}>M</button>
+                    <button type="button" onClick={() => setEnrolSexe('F')} className={`flex-1 py-2 rounded-xl text-sm font-bold transition-colors ${enrolSexe === 'F' ? 'bg-indigo-600 text-white' : 'bg-slate-900 border border-slate-800 text-slate-400'}`}>F</button>
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-semibold text-slate-400 mb-1">Nationalité</label>
+                  <input type="text" value={enrolNationalite} onChange={(e) => setEnrolNationalite(e.target.value)} className="w-full bg-slate-900 border border-slate-800 rounded-xl px-3 py-2 text-slate-200 text-sm focus:outline-none focus:border-indigo-500" />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-semibold text-slate-400 mb-1">Date de naissance</label>
+                  <input
+                    type="text"
+                    value={enrolDateNaissance}
+                    onChange={(e) => setEnrolDateNaissance(e.target.value)}
+                    placeholder="JJ/MM/AAAA"
+                    className="w-full bg-slate-900 border border-slate-800 rounded-xl px-3 py-2 text-slate-200 text-sm focus:outline-none focus:border-indigo-500"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-semibold text-slate-400 mb-1">Lieu de naissance</label>
+                  <div className="flex gap-1.5">
+                    <input type="text" value={enrolLieuNaissance} onChange={(e) => setEnrolLieuNaissance(e.target.value)} placeholder="Ville / village" className="flex-1 bg-slate-900 border border-slate-800 rounded-xl px-3 py-2 text-slate-200 text-sm focus:outline-none focus:border-indigo-500" />
+                    <button onClick={() => handleEnrolVoiceField('lieuNaissance')} className={`p-2 rounded-xl transition-colors ${enrolIsListening && enrolVoiceField === 'lieuNaissance' ? 'bg-rose-600 text-white animate-pulse' : 'bg-slate-800 hover:bg-slate-700 text-indigo-400'}`}>
+                      <Mic className="w-4 h-4" />
+                    </button>
+                  </div>
+                </div>
+
+                <div className="sm:col-span-2">
+                  <label className="block text-xs font-semibold text-slate-400 mb-1">Téléphone des parents</label>
+                  <div className="flex gap-1.5">
+                    <input type="tel" value={enrolTelephone} onChange={(e) => setEnrolTelephone(e.target.value.replace(/\D/g, ''))} placeholder="Ex : 97000000" className="flex-1 bg-slate-900 border border-slate-800 rounded-xl px-3 py-2 text-slate-200 text-sm focus:outline-none focus:border-indigo-500" />
+                    <button onClick={() => handleEnrolVoiceField('telephone')} className={`p-2 rounded-xl transition-colors ${enrolIsListening && enrolVoiceField === 'telephone' ? 'bg-rose-600 text-white animate-pulse' : 'bg-slate-800 hover:bg-slate-700 text-indigo-400'}`}>
+                      <Mic className="w-4 h-4" />
+                    </button>
+                  </div>
+                </div>
+              </div>
+
+              <button onClick={handleAddEnrolement} className="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-sm py-3 rounded-xl transition-colors flex items-center justify-center gap-2 shadow-md shadow-indigo-900/30">
+                <Plus className="w-4 h-4" />
+                Ajouter à la liste d'enrôlement
+              </button>
+            </div>
+
+            {/* --- LISTE DES CANDIDATS À ENRÔLER --- */}
+            <div className="bg-slate-950 border border-slate-800/80 rounded-3xl p-5 space-y-4">
+              <div className="flex items-center justify-between">
+                <h4 className="font-bold text-white text-sm flex items-center gap-2">
+                  <Users className="text-indigo-400 w-4 h-4" />
+                  À enrôler ({enrolements.length})
+                </h4>
+                <button onClick={exportEnrolementsToEducMaster} className="bg-gradient-to-r from-emerald-500 to-teal-500 text-slate-950 font-black text-xs px-4 py-2 rounded-xl flex items-center gap-1.5 shadow-lg shadow-emerald-500/10 hover:opacity-95 transition-all">
+                  <Download className="w-3.5 h-3.5" />
+                  Exporter (.csv)
+                </button>
+              </div>
+
+              {enrolements.length === 0 ? (
+                <div className="text-center py-10 space-y-1 border border-dashed border-slate-800 rounded-xl">
+                  <p className="text-sm text-slate-400 font-medium">Aucun élève dans la liste d'enrôlement.</p>
+                  <p className="text-xs text-slate-600">Ajoutez-en via le formulaire ci-dessus ou le scanner IA.</p>
+                </div>
+              ) : (
+                <div className="overflow-x-auto">
+                  <table className="w-full text-left text-xs text-slate-300">
+                    <thead className="bg-slate-900 text-slate-400 uppercase font-bold">
+                      <tr>
+                        <th className="px-3 py-2">Nom</th>
+                        <th className="px-3 py-2">Prénoms</th>
+                        <th className="px-3 py-2">Sexe</th>
+                        <th className="px-3 py-2">Naissance</th>
+                        <th className="px-3 py-2">Lieu</th>
+                        <th className="px-3 py-2">Téléphone</th>
+                        <th className="px-3 py-2 text-right">Actions</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-800/40">
+                      {enrolements.map(c => (
+                        <tr key={c.id} className="hover:bg-slate-900/30">
+                          <td className="px-3 py-2 font-semibold text-white">{c.nom}</td>
+                          <td className="px-3 py-2">{c.prenoms}</td>
+                          <td className="px-3 py-2">{c.sexe}</td>
+                          <td className="px-3 py-2">{c.dateNaissance || '-'}</td>
+                          <td className="px-3 py-2">{c.lieuNaissance || '-'}</td>
+                          <td className="px-3 py-2">{c.telephone || '-'}</td>
+                          <td className="px-3 py-2 text-right">
+                            <button onClick={() => handleDeleteEnrolement(c.id)} className="p-1.5 bg-rose-500/10 border border-rose-500/20 text-rose-400 rounded-lg hover:bg-rose-500/20 transition-colors">
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </button>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
             </div>
           </div>
         )}
