@@ -37,6 +37,12 @@ const EDUCMASTER_COLUMN_NAMES = {
 
 const CLASSES_PRIMAIRE = ['CI', 'CP', 'CE1', 'CE2', 'CM1', 'CM2'];
 
+// --- LIMITES DU MODE DÉMO / GRATUIT ---
+// Un compte non payant (statut_abonnement === 'demo') peut saisir jusqu'à
+// ce nombre d'élèves (au total, dans une seule classe) pour tester l'app,
+// export XLSX inclus. Au-delà, la modale d'abonnement s'ouvre.
+const DEMO_MAX_ELEVES = 5;
+
 const ABONNEMENT_PLANS = [
   {
     id: '1an', label: '1 An', tagline: 'Formule Découverte', duree_mois: 12, prix: 1500,
@@ -88,7 +94,9 @@ export default function App() {
     statut_abonnement: 'demo',
     planId: null,
     plan: null,
-    expireLe: null
+    expireLe: null,
+    etablissement: '',
+    etablissementVerrouille: false
   });
 
   const [classes, setClasses] = useState([
@@ -305,9 +313,24 @@ export default function App() {
     if (currentSaisieIndex > 0) setCurrentSaisieIndex(prev => prev - 1);
   };
 
+  // --- LIMITE DE CLASSES SELON LA FORMULE D'ABONNEMENT ---
+  const getMaxClassesForPlan = () => {
+    if (user.statut_abonnement !== 'actif') return 1; // mode démo
+    if (user.planId === '5ans') return 6; // VIP Premium : 6 classes
+    return 1; // Découverte (1 an) et Sérénité (3 ans) : 1 classe
+  };
+
   const handleCreateClass = (e) => {
     if (e && e.preventDefault) e.preventDefault();
     if (!newClassName.trim()) return;
+
+    const maxClasses = getMaxClassesForPlan();
+    if (classes.length >= maxClasses) {
+      triggerNotif(`Votre formule actuelle autorise au maximum ${maxClasses} classe(s). Passez à une formule supérieure pour en créer davantage.`, 'error');
+      setShowAddClassModal(false);
+      setPaywallModal(true);
+      return;
+    }
 
     const newClass = { id: `class-${Date.now()}`, nom: newClassName, niveau: newClassNiveau, eleves: [] };
 
@@ -354,6 +377,13 @@ export default function App() {
     if (e && e.preventDefault) e.preventDefault();
     if (!newStudentNom.trim() || !newStudentPrenoms.trim()) {
       triggerNotif("Veuillez remplir le nom et le prénom de l'élève.", 'error');
+      return;
+    }
+
+    // --- LIMITE DU MODE DÉMO ---
+    if (user.statut_abonnement === 'demo' && activeClass.eleves.length >= DEMO_MAX_ELEVES) {
+      triggerNotif(`Le mode d'essai gratuit est limité à ${DEMO_MAX_ELEVES} élèves. Abonnez-vous pour continuer.`, 'error');
+      setPaywallModal(true);
       return;
     }
 
@@ -462,6 +492,13 @@ export default function App() {
       }
     }
 
+    // --- LIMITE DU MODE DÉMO ---
+    let demoTruncated = false;
+    if (user.statut_abonnement === 'demo' && finalStudents.length > DEMO_MAX_ELEVES) {
+      finalStudents = finalStudents.slice(0, DEMO_MAX_ELEVES);
+      demoTruncated = true;
+    }
+
     setClasses(prev => prev.map(c => c.id === selectedClassId ? { ...c, eleves: finalStudents } : c));
 
     if (replaced) {
@@ -469,7 +506,12 @@ export default function App() {
       setCurrentSaisieIndex(0);
     }
 
-    triggerNotif(`${imported.length} élève(s) importé(s) avec succès depuis le fichier EducMaster !`, 'success');
+    if (demoTruncated) {
+      triggerNotif(`Le mode d'essai gratuit est limité à ${DEMO_MAX_ELEVES} élèves. Seuls les ${DEMO_MAX_ELEVES} premiers ont été importés — abonnez-vous pour importer la liste complète.`, 'error');
+      setPaywallModal(true);
+    } else {
+      triggerNotif(`${imported.length} élève(s) importé(s) avec succès depuis le fichier EducMaster !`, 'success');
+    }
   };
 
   const handleImportEducMasterFile = (e) => {
@@ -553,44 +595,58 @@ export default function App() {
     }
 
     // Ligne 1 : Matricule,Nom,Prénoms, puis chaque matière suivie d'une case vide
-    let row1 = "Matricule,Nom,Prénoms";
+    const row1 = ['Matricule', 'Nom', 'Prénoms'];
     MATIERES_PRIMAIRE.forEach(m => {
       const label = EDUCMASTER_COLUMN_NAMES[m.id] || m.label;
-      row1 += `,${escapeCsv(label)},`;
+      row1.push(label, '');
     });
 
     // Ligne 2 : cases vides pour Matricule/Nom/Prénoms, puis Note obtenue/Perfectionnement par matière
-    let row2 = ",,";
+    const row2 = ['', '', ''];
     MATIERES_PRIMAIRE.forEach(() => {
-      row2 += ",Note obtenue,Note perfectionnement";
+      row2.push('Note obtenue', 'Note perfectionnement');
     });
 
-    let csvContent = row1 + "\n" + row2 + "\n";
+    const rows = [row1, row2];
 
     activeClass.eleves.forEach(el => {
-      // Le matricule est préfixé d'une apostrophe pour forcer Excel à le traiter
-      // comme du texte (évite la troncature / notation scientifique des longs identifiants numériques)
-      let row = `${escapeCsv("'" + el.matricule)},${escapeCsv(el.nom)},${escapeCsv(el.prenoms)}`;
-
+      const row = [el.matricule, el.nom, el.prenoms];
       MATIERES_PRIMAIRE.forEach(m => {
         const studentNote = notes[selectedClassId]?.[m.id]?.[el.id] || {};
-        const nObtenu = studentNote.note !== undefined ? studentNote.note : "";
-        const nPerf = studentNote.perf !== undefined ? studentNote.perf : "";
-        row += `,${nObtenu},${nPerf}`;
+        row.push(studentNote.note !== undefined ? studentNote.note : '');
+        row.push(studentNote.perf !== undefined ? studentNote.perf : '');
       });
-      csvContent += row + "\n";
+      rows.push(row);
     });
 
-    const blob = new Blob(["\ufeff" + csvContent], { type: 'text/csv;charset=utf-8;' });
+    const worksheet = XLSX.utils.aoa_to_sheet(rows);
+
+    // Force explicitement la colonne Matricule (colonne A) en texte pour chaque élève,
+    // afin qu'Excel ne tronque jamais les longs identifiants numériques ni ne les
+    // convertisse en notation scientifique.
+    for (let r = 2; r < rows.length; r++) {
+      const cellRef = XLSX.utils.encode_cell({ r, c: 0 });
+      if (worksheet[cellRef]) {
+        worksheet[cellRef].t = 's';
+        worksheet[cellRef].z = '@';
+      }
+    }
+
+    const workbook = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(workbook, worksheet, 'Import_Notes');
+
+    const wbout = XLSX.write(workbook, { bookType: 'xlsx', type: 'array' });
+    const blob = new Blob([wbout], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
     const url = URL.createObjectURL(blob);
     const link = document.createElement("a");
     link.setAttribute("href", url);
-    link.setAttribute("download", `EducMaster_Notes_${activeClass.nom.replace(/\s+/g, '_')}_Import.csv`);
+    link.setAttribute("download", `EducMaster_Notes_${activeClass.nom.replace(/\s+/g, '_')}_Import.xlsx`);
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
+    URL.revokeObjectURL(url);
 
-    triggerNotif("Fichier d'importation EducMaster généré avec succès !", 'success');
+    triggerNotif("Fichier Excel (.xlsx) EducMaster généré avec succès !", 'success');
   };
 
   const computeExpirationLabel = (isoDateString, dureeMoisFallback) => {
@@ -1038,6 +1094,22 @@ Si une information est illisible ou absente, mets une chaîne vide "" pour ce ch
     document.body.removeChild(link);
     URL.revokeObjectURL(url);
     triggerNotif("Fichier Excel (.xlsx) d'enrôlement généré avec succès !", 'success');
+  };
+
+  // --- VERROUILLAGE DE L'ÉTABLISSEMENT (première barrière anti-abus côté client) ---
+  // Empêche un même compte de changer d'établissement à volonté pour faire de la
+  // prestation commerciale pour plusieurs écoles avec une seule licence.
+  // NOTE : ce verrou est une protection UX de premier niveau ; l'application
+  // stricte (infalsifiable) doit être faite côté serveur, en associant
+  // l'établissement à la clé de licence Chariow lors de son activation.
+  const handleLockEtablissement = () => {
+    if (!user.etablissement.trim()) {
+      triggerNotif("Veuillez renseigner le nom de votre établissement avant de verrouiller.", 'error');
+      return;
+    }
+    if (!confirm("Une fois verrouillé, le nom de l'établissement ne pourra plus être modifié sans passer par le support. Confirmer ?")) return;
+    setUser(prev => ({ ...prev, etablissementVerrouille: true }));
+    triggerNotif("Établissement verrouillé avec succès.", 'success');
   };
 
   const handleOpenFiches = () => {
@@ -2285,6 +2357,36 @@ Si une information est illisible ou absente, mets une chaîne vide "" pour ce ch
             </div>
 
             <div className="bg-slate-950 border border-slate-800 rounded-2xl p-5 space-y-4">
+              <h4 className="font-bold text-slate-200 text-sm">Établissement scolaire</h4>
+              <p className="text-xs text-slate-400">
+                Une fois verrouillé, ce nom ne peut plus être modifié sans passer par le support — cette mesure protège contre l'utilisation d'une même licence pour plusieurs écoles différentes.
+              </p>
+              <div className="flex flex-col sm:flex-row gap-2">
+                <input
+                  type="text"
+                  value={user.etablissement}
+                  onChange={(e) => setUser(prev => ({ ...prev, etablissement: e.target.value }))}
+                  disabled={user.etablissementVerrouille}
+                  placeholder="Ex : EPP Tchankada"
+                  className="flex-1 bg-slate-900 border border-slate-800 rounded-xl px-3.5 py-2.5 text-slate-200 text-xs focus:outline-none focus:border-indigo-500 font-semibold disabled:opacity-60"
+                />
+                {!user.etablissementVerrouille ? (
+                  <button
+                    onClick={handleLockEtablissement}
+                    className="bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs px-4 py-2.5 rounded-xl transition-colors shrink-0"
+                  >
+                    Confirmer et verrouiller
+                  </button>
+                ) : (
+                  <span className="bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 text-xs px-4 py-2.5 rounded-xl flex items-center gap-1.5 font-medium shrink-0">
+                    <Lock className="w-3.5 h-3.5" />
+                    Verrouillé
+                  </span>
+                )}
+              </div>
+            </div>
+
+            <div className="bg-slate-950 border border-slate-800 rounded-2xl p-5 space-y-4">
               <h4 className="font-bold text-slate-200 text-sm">Informations de licence</h4>
               <div className="flex flex-col sm:flex-row justify-between sm:items-center gap-3 bg-slate-900 p-4 rounded-xl border border-slate-800">
                 <div>
@@ -2325,7 +2427,7 @@ Si une information est illisible ou absente, mets une chaîne vide "" pour ce ch
                     setNotes({});
                     setSelectedClassId('class-1');
                     setCurrentSaisieIndex(0);
-                    setUser({ nom: 'Enseignant Bénin', tel: '0197000000', statut_abonnement: 'demo', planId: null, plan: null, expireLe: null });
+                    setUser({ nom: 'Enseignant Bénin', tel: '0197000000', statut_abonnement: 'demo', planId: null, plan: null, expireLe: null, etablissement: '', etablissementVerrouille: false });
                     triggerNotif("Application réinitialisée.");
                   }
                 }}
