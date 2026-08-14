@@ -37,11 +37,13 @@ const EDUCMASTER_COLUMN_NAMES = {
 
 const CLASSES_PRIMAIRE = ['CI', 'CP', 'CE1', 'CE2', 'CM1', 'CM2'];
 
-// --- LIMITES DU MODE DÉMO / GRATUIT ---
-// Un compte non payant (statut_abonnement === 'demo') peut saisir jusqu'à
-// ce nombre d'élèves (au total, dans une seule classe) pour tester l'app,
-// export XLSX inclus. Au-delà, la modale d'abonnement s'ouvre.
-const DEMO_MAX_ELEVES = 5;
+// --- CLASSE D'ESSAI (démo permanente, hors quota des classes créées) ---
+// CM2 Émeraude sert de bac à sable : accessible à toutes les formules (y
+// compris sans abonnement), plafonnée à 5 élèves, avec 100% des
+// fonctionnalités (saisie, scan, export) pour laisser l'enseignant juger
+// du rendu final avant de souscrire.
+const TRIAL_CLASS_ID = 'class-1';
+const TRIAL_CLASS_MAX_ELEVES = 5;
 
 const ABONNEMENT_PLANS = [
   {
@@ -313,20 +315,24 @@ export default function App() {
     if (currentSaisieIndex > 0) setCurrentSaisieIndex(prev => prev - 1);
   };
 
-  // --- LIMITE DE CLASSES SELON LA FORMULE D'ABONNEMENT ---
-  const getMaxClassesForPlan = () => {
-    if (user.statut_abonnement !== 'actif') return 1; // mode démo
-    if (user.planId === '5ans') return 6; // VIP Premium : 6 classes
-    return 1; // Découverte (1 an) et Sérénité (3 ans) : 1 classe
+  // --- QUOTA DE CLASSES OFFICIELLES SELON LA FORMULE D'ABONNEMENT ---
+  // La classe d'essai (CM2 Émeraude) est hors-quota : elle ne compte jamais
+  // dans ce total, quelle que soit la formule.
+  const getMaxCreatableClasses = () => {
+    if (user.statut_abonnement !== 'actif') return 0; // aucun abonnement : uniquement la classe d'essai
+    if (user.planId === '5ans') return 6; // VIP Premium : 6 classes officielles + la classe d'essai
+    return 2; // Découverte (1 an) et Sérénité (3 ans) : 2 classes officielles + la classe d'essai
   };
 
   const handleCreateClass = (e) => {
     if (e && e.preventDefault) e.preventDefault();
     if (!newClassName.trim()) return;
 
-    const maxClasses = getMaxClassesForPlan();
-    if (classes.length >= maxClasses) {
-      triggerNotif(`Votre formule actuelle autorise au maximum ${maxClasses} classe(s). Passez à une formule supérieure pour en créer davantage.`, 'error');
+    const officialClassesCount = classes.filter(c => c.id !== TRIAL_CLASS_ID).length;
+    const maxCreatable = getMaxCreatableClasses();
+    if (officialClassesCount >= maxCreatable) {
+      const totalDisponible = maxCreatable + 1; // + la classe d'essai CM2 Émeraude
+      triggerNotif(`Votre formule actuelle autorise au maximum ${totalDisponible} classe(s) au total (dont la classe d'essai "CM2 Émeraude"). Passez à une formule supérieure pour en créer davantage.`, 'error');
       setShowAddClassModal(false);
       setPaywallModal(true);
       return;
@@ -381,8 +387,8 @@ export default function App() {
     }
 
     // --- LIMITE DU MODE DÉMO ---
-    if (user.statut_abonnement === 'demo' && activeClass.eleves.length >= DEMO_MAX_ELEVES) {
-      triggerNotif(`Le mode d'essai gratuit est limité à ${DEMO_MAX_ELEVES} élèves. Abonnez-vous pour continuer.`, 'error');
+    if (activeClass.id === TRIAL_CLASS_ID && activeClass.eleves.length >= TRIAL_CLASS_MAX_ELEVES) {
+      triggerNotif(`La classe d'essai "CM2 Émeraude" est limitée à ${TRIAL_CLASS_MAX_ELEVES} élèves. Abonnez-vous pour créer vos propres classes sans cette limite.`, 'error');
       setPaywallModal(true);
       return;
     }
@@ -494,8 +500,8 @@ export default function App() {
 
     // --- LIMITE DU MODE DÉMO ---
     let demoTruncated = false;
-    if (user.statut_abonnement === 'demo' && finalStudents.length > DEMO_MAX_ELEVES) {
-      finalStudents = finalStudents.slice(0, DEMO_MAX_ELEVES);
+    if (selectedClassId === TRIAL_CLASS_ID && finalStudents.length > TRIAL_CLASS_MAX_ELEVES) {
+      finalStudents = finalStudents.slice(0, TRIAL_CLASS_MAX_ELEVES);
       demoTruncated = true;
     }
 
@@ -507,7 +513,7 @@ export default function App() {
     }
 
     if (demoTruncated) {
-      triggerNotif(`Le mode d'essai gratuit est limité à ${DEMO_MAX_ELEVES} élèves. Seuls les ${DEMO_MAX_ELEVES} premiers ont été importés — abonnez-vous pour importer la liste complète.`, 'error');
+      triggerNotif(`La classe d'essai "CM2 Émeraude" est limitée à ${TRIAL_CLASS_MAX_ELEVES} élèves. Seuls les ${TRIAL_CLASS_MAX_ELEVES} premiers ont été importés — abonnez-vous pour créer vos propres classes sans cette limite.`, 'error');
       setPaywallModal(true);
     } else {
       triggerNotif(`${imported.length} élève(s) importé(s) avec succès depuis le fichier EducMaster !`, 'success');
@@ -585,7 +591,10 @@ export default function App() {
   const escapeCsv = (val) => `"${String(val ?? '').replace(/"/g, '""')}"`;
 
   const exportToEducMaster = () => {
-    if (user.statut_abonnement === 'demo') {
+    // La classe d'essai (CM2 Émeraude) donne accès à 100% des fonctionnalités,
+    // export inclus, même sans abonnement actif — c'est tout l'intérêt du bac à sable.
+    const isTrialClass = activeClass?.id === TRIAL_CLASS_ID;
+    if (user.statut_abonnement === 'demo' && !isTrialClass) {
       setPaywallModal(true);
       return;
     }
