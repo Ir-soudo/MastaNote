@@ -4,7 +4,7 @@ import {
   BookOpen, Users, Plus, Download, Mic, MicOff, CheckCircle, CreditCard,
   TrendingUp, Award, AlertTriangle, FileSpreadsheet, Trash2, ChevronRight,
   ArrowLeft, Settings, Lock, Check, Camera, Sparkles, Image as ImageIcon,
-  RotateCcw, Upload, Library
+  RotateCcw, Upload, Library, GraduationCap
 } from 'lucide-react';
 
 // --- CONFIGURATION ET COMPOSANTS PRINCIPAUX ---
@@ -36,6 +36,14 @@ const EDUCMASTER_COLUMN_NAMES = {
 };
 
 const CLASSES_PRIMAIRE = ['CI', 'CP', 'CE1', 'CE2', 'CM1', 'CM2'];
+
+// --- TYPES D'ÉVALUATION (sélection obligatoire avant toute saisie de notes) ---
+const EVALUATIONS = [
+  { id: 'sommative1', label: 'Évaluation Sommative 1', short: 'Sommative 1' },
+  { id: 'sommative2', label: 'Évaluation Sommative 2', short: 'Sommative 2' },
+  { id: 'sommative3', label: 'Évaluation Sommative 3', short: 'Sommative 3' },
+  { id: 'formative1', label: 'Évaluation Formative 1', short: 'Formative 1' }
+];
 
 // --- CLASSE D'ESSAI (démo permanente, hors quota des classes créées) ---
 // CM2 Émeraude sert de bac à sable : accessible à toutes les formules (y
@@ -85,12 +93,36 @@ const ELEVES_INITIAL_CM2 = [
   { id: '8', matricule: '24-CM2-008', nom: 'ADANZAN', prenoms: 'Sèmèvo Pierre' }
 ];
 
+// Nettoie une chaîne pour un usage dans un nom de fichier (sans accents,
+// sans espaces ni ponctuation) — mime le motif observé sur les fichiers
+// officiels EducMaster (ex: "epptchankadacm2").
+const slugifyForFilename = (str) =>
+  (str || '')
+    .toString()
+    .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+    .replace(/[^a-zA-Z0-9]+/g, '')
+    .toLowerCase();
+
 export default function App() {
   // --- ÉTAT LANDING PAGE ---
   const [hasEnteredApp, setHasEnteredApp] = useState(false);
 
   // --- ÉTATS ---
-  const [user, setUser] = useState({
+  const STORAGE_KEY = 'mastanote-ai-state-v2';
+
+  const loadPersistedState = () => {
+    try {
+      const raw = localStorage.getItem(STORAGE_KEY);
+      return raw ? JSON.parse(raw) : null;
+    } catch (err) {
+      console.error("Impossible de lire les données sauvegardées :", err);
+      return null;
+    }
+  };
+
+  const persisted = loadPersistedState();
+
+  const [user, setUser] = useState(persisted?.user || {
     nom: 'Enseignant Bénin',
     tel: '0197000000',
     statut_abonnement: 'demo',
@@ -98,27 +130,44 @@ export default function App() {
     plan: null,
     expireLe: null,
     etablissement: '',
-    etablissementVerrouille: false
+    etablissementVerrouille: false,
+    exportUsed: false
   });
 
-  const [classes, setClasses] = useState([
+  const [classes, setClasses] = useState(persisted?.classes || [
     { id: 'class-1', nom: 'CM2 Émeraude', niveau: 'CM2', eleves: ELEVES_INITIAL_CM2 }
   ]);
-  const [selectedClassId, setSelectedClassId] = useState('class-1');
-  const [activeTab, setActiveTab] = useState('dashboard');
-  const [activeMatiere, setActiveMatiere] = useState('maths');
 
-  const [notes, setNotes] = useState({
+  // Structure : notes[classeId][evaluationId][matiereId][eleveId] = { note, perf }
+  const [notes, setNotes] = useState(persisted?.notes || {
     'class-1': {
-      'maths': {
-        '1': { note: 14, perf: 15 }, '2': { note: 8.5, perf: 10 }, '3': { note: 16, perf: 16 },
-        '4': { note: 10, perf: 12 }, '5': { note: 18, perf: 18 }
-      },
-      'dictee': {
-        '1': { note: 12, perf: 14 }, '2': { note: 9, perf: 11 }, '3': { note: 15, perf: 15 }
+      'sommative1': {
+        'maths': {
+          '1': { note: 14, perf: 15 }, '2': { note: 8.5, perf: 10 }, '3': { note: 16, perf: 16 },
+          '4': { note: 10, perf: 12 }, '5': { note: 18, perf: 18 }
+        },
+        'dictee': {
+          '1': { note: 12, perf: 14 }, '2': { note: 9, perf: 11 }, '3': { note: 15, perf: 15 }
+        }
       }
     }
   });
+
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      try {
+        localStorage.setItem(STORAGE_KEY, JSON.stringify({ user, classes, notes }));
+      } catch (err) {
+        console.error("Impossible de sauvegarder les données :", err);
+      }
+    }, 300);
+    return () => clearTimeout(timer);
+  }, [user, classes, notes]);
+
+  const [selectedClassId, setSelectedClassId] = useState('class-1');
+  const [activeTab, setActiveTab] = useState('dashboard');
+  const [activeMatiere, setActiveMatiere] = useState('maths');
+  const [activeEvaluation, setActiveEvaluation] = useState('sommative1');
 
   const [currentSaisieIndex, setCurrentSaisieIndex] = useState(0);
   const [tempNote, setTempNote] = useState('');
@@ -143,6 +192,7 @@ export default function App() {
   const [updateInfo, setUpdateInfo] = useState(null);
 
   const [scanMatiere, setScanMatiere] = useState('maths');
+  const [scanEvaluation, setScanEvaluation] = useState('sommative1');
   const [scanImage, setScanImage] = useState(null);
   const [scanStatus, setScanStatus] = useState('idle');
   const [scanResults, setScanResults] = useState([]);
@@ -176,6 +226,15 @@ export default function App() {
   const enrolGalleryInputRef = useRef(null);
 
   const isPremiumPlan = user.statut_abonnement === 'actif' && user.planId === '5ans';
+
+  // --- ÉTATS DÉRIVÉS DU MODE ESSAI (enseignant non abonné) ---
+  const isTrial = user.statut_abonnement === 'demo';
+  const canExport = !isTrial || !user.exportUsed;
+
+  const truncateStudentsList = (list, max = TRIAL_CLASS_MAX_ELEVES) => {
+    if (!isTrial || list.length <= max) return { list, truncated: false };
+    return { list: list.slice(0, max), truncated: true };
+  };
 
   const triggerNotif = (message, type = 'success') => {
     setNotif({ message, type });
@@ -220,7 +279,7 @@ export default function App() {
       rec.onstart = null; rec.onresult = null; rec.onerror = null; rec.onend = null;
       try { rec.stop(); } catch (e) { /* déjà arrêté */ }
     };
-  }, [selectedClassId, activeMatiere, currentSaisieIndex]);
+  }, [selectedClassId, activeMatiere, activeEvaluation, currentSaisieIndex]);
 
   const processVoiceCommand = (text) => {
     setVoiceStatus(`Reconnu : "${text}"`);
@@ -265,12 +324,12 @@ export default function App() {
 
   useEffect(() => {
     if (activeClass && activeEleve) {
-      const currentNotes = notes[selectedClassId]?.[activeMatiere]?.[activeEleve.id] || { note: '', perf: '' };
+      const currentNotes = notes[selectedClassId]?.[activeEvaluation]?.[activeMatiere]?.[activeEleve.id] || { note: '', perf: '' };
       setTempNote(currentNotes.note !== undefined ? currentNotes.note.toString() : '');
       setTempPerf(currentNotes.perf !== undefined ? currentNotes.perf.toString() : '');
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [currentSaisieIndex, activeMatiere, selectedClassId]);
+  }, [currentSaisieIndex, activeMatiere, activeEvaluation, selectedClassId]);
 
   const handleSaveCurrentAndNext = () => {
     if (!activeClass || !activeEleve) return;
@@ -288,16 +347,20 @@ export default function App() {
 
     setNotes(prev => {
       const classData = prev[selectedClassId] || {};
-      const matiereData = classData[activeMatiere] || {};
+      const evalData = classData[activeEvaluation] || {};
+      const matiereData = evalData[activeMatiere] || {};
       return {
         ...prev,
         [selectedClassId]: {
           ...classData,
-          [activeMatiere]: {
-            ...matiereData,
-            [activeEleve.id]: {
-              note: tempNote !== '' ? n : undefined,
-              perf: tempPerf !== '' ? p : undefined
+          [activeEvaluation]: {
+            ...evalData,
+            [activeMatiere]: {
+              ...matiereData,
+              [activeEleve.id]: {
+                note: tempNote !== '' ? n : undefined,
+                perf: tempPerf !== '' ? p : undefined
+              }
             }
           }
         }
@@ -386,9 +449,8 @@ export default function App() {
       return;
     }
 
-    // --- LIMITE DU MODE DÉMO ---
-    if (activeClass.id === TRIAL_CLASS_ID && activeClass.eleves.length >= TRIAL_CLASS_MAX_ELEVES) {
-      triggerNotif(`La classe d'essai "CM2 Émeraude" est limitée à ${TRIAL_CLASS_MAX_ELEVES} élèves. Abonnez-vous pour créer vos propres classes sans cette limite.`, 'error');
+    if (isTrial && activeClass.eleves.length >= TRIAL_CLASS_MAX_ELEVES) {
+      triggerNotif(`Mode essai : la classe "CM2 Émeraude" est limitée à ${TRIAL_CLASS_MAX_ELEVES} élèves. Abonnez-vous pour créer vos propres classes sans cette limite.`, 'error');
       setPaywallModal(true);
       return;
     }
@@ -498,12 +560,8 @@ export default function App() {
       }
     }
 
-    // --- LIMITE DU MODE DÉMO ---
-    let demoTruncated = false;
-    if (selectedClassId === TRIAL_CLASS_ID && finalStudents.length > TRIAL_CLASS_MAX_ELEVES) {
-      finalStudents = finalStudents.slice(0, TRIAL_CLASS_MAX_ELEVES);
-      demoTruncated = true;
-    }
+    const { list: truncatedStudents, truncated } = truncateStudentsList(finalStudents);
+    finalStudents = truncatedStudents;
 
     setClasses(prev => prev.map(c => c.id === selectedClassId ? { ...c, eleves: finalStudents } : c));
 
@@ -512,8 +570,8 @@ export default function App() {
       setCurrentSaisieIndex(0);
     }
 
-    if (demoTruncated) {
-      triggerNotif(`La classe d'essai "CM2 Émeraude" est limitée à ${TRIAL_CLASS_MAX_ELEVES} élèves. Seuls les ${TRIAL_CLASS_MAX_ELEVES} premiers ont été importés — abonnez-vous pour créer vos propres classes sans cette limite.`, 'error');
+    if (truncated) {
+      triggerNotif("Mode essai : Seuls les 5 premiers élèves ont été conservés.", 'error');
       setPaywallModal(true);
     } else {
       triggerNotif(`${imported.length} élève(s) importé(s) avec succès depuis le fichier EducMaster !`, 'success');
@@ -563,7 +621,7 @@ export default function App() {
 
   const getClassStats = () => {
     if (!activeClass || activeClass.eleves.length === 0) return { moyenne: 0, taux: 0, top: '-', flop: '-' };
-    const matNotes = notes[selectedClassId]?.[activeMatiere] || {};
+    const matNotes = notes[selectedClassId]?.[activeEvaluation]?.[activeMatiere] || {};
     let total = 0, count = 0, admis = 0, maxNote = -1, minNote = 21, topStudent = '-', flopStudent = '-';
 
     activeClass.eleves.forEach(el => {
@@ -591,10 +649,9 @@ export default function App() {
   const escapeCsv = (val) => `"${String(val ?? '').replace(/"/g, '""')}"`;
 
   const exportToEducMaster = () => {
-    // La classe d'essai (CM2 Émeraude) donne accès à 100% des fonctionnalités,
-    // export inclus, même sans abonnement actif — c'est tout l'intérêt du bac à sable.
-    const isTrialClass = activeClass?.id === TRIAL_CLASS_ID;
-    if (user.statut_abonnement === 'demo' && !isTrialClass) {
+    // Mode essai : un seul export gratuit autorisé, pour juger du rendu final.
+    if (isTrial && !canExport) {
+      triggerNotif("Vous avez déjà utilisé votre export d'essai gratuit (1/1). Abonnez-vous pour exporter sans limite.", 'error');
       setPaywallModal(true);
       return;
     }
@@ -603,14 +660,12 @@ export default function App() {
       return;
     }
 
-    // Ligne 1 : Matricule,Nom,Prénoms, puis chaque matière suivie d'une case vide
     const row1 = ['Matricule', 'Nom', 'Prénoms'];
     MATIERES_PRIMAIRE.forEach(m => {
       const label = EDUCMASTER_COLUMN_NAMES[m.id] || m.label;
       row1.push(label, '');
     });
 
-    // Ligne 2 : cases vides pour Matricule/Nom/Prénoms, puis Note obtenue/Perfectionnement par matière
     const row2 = ['', '', ''];
     MATIERES_PRIMAIRE.forEach(() => {
       row2.push('Note obtenue', 'Note perfectionnement');
@@ -621,7 +676,7 @@ export default function App() {
     activeClass.eleves.forEach(el => {
       const row = [el.matricule, el.nom, el.prenoms];
       MATIERES_PRIMAIRE.forEach(m => {
-        const studentNote = notes[selectedClassId]?.[m.id]?.[el.id] || {};
+        const studentNote = notes[selectedClassId]?.[activeEvaluation]?.[m.id]?.[el.id] || {};
         row.push(studentNote.note !== undefined ? studentNote.note : '');
         row.push(studentNote.perf !== undefined ? studentNote.perf : '');
       });
@@ -630,9 +685,6 @@ export default function App() {
 
     const worksheet = XLSX.utils.aoa_to_sheet(rows);
 
-    // Force explicitement la colonne Matricule (colonne A) en texte pour chaque élève,
-    // afin qu'Excel ne tronque jamais les longs identifiants numériques ni ne les
-    // convertisse en notation scientifique.
     for (let r = 2; r < rows.length; r++) {
       const cellRef = XLSX.utils.encode_cell({ r, c: 0 });
       if (worksheet[cellRef]) {
@@ -649,11 +701,30 @@ export default function App() {
     const url = URL.createObjectURL(blob);
     const link = document.createElement("a");
     link.setAttribute("href", url);
-    link.setAttribute("download", `EducMaster_Notes_${activeClass.nom.replace(/\s+/g, '_')}_Import.xlsx`);
+
+    // --- NOMENCLATURE D'EXPORT ---
+    // Motif inspiré des fichiers officiels EducMaster observés
+    // ("{timestamp}_modelimportationnotes_{anneeScolaire}{etablissement}{niveau}.xlsx").
+    // À ajuster si EducMaster documente une norme différente pour les
+    // fichiers TÉLÉVERSÉS (upload) par les enseignants.
+    const anneeScolaire = '20252026';
+    const etablissementSlug = slugifyForFilename(user.etablissement) || 'ecole';
+    const niveauSlug = slugifyForFilename(activeClass.niveau);
+    const evaluationSlug = slugifyForFilename(
+      EVALUATIONS.find(ev => ev.id === activeEvaluation)?.short || activeEvaluation
+    );
+    const timestamp = Date.now();
+    const fileName = `${timestamp}_notesimportees_${anneeScolaire}${etablissementSlug}${niveauSlug}_${evaluationSlug}.xlsx`;
+
+    link.setAttribute("download", fileName);
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
     URL.revokeObjectURL(url);
+
+    if (isTrial) {
+      setUser(prev => ({ ...prev, exportUsed: true }));
+    }
 
     triggerNotif("Fichier Excel (.xlsx) EducMaster généré avec succès !", 'success');
   };
@@ -768,8 +839,9 @@ export default function App() {
     try {
       const roster = activeClass.eleves.map(el => `${el.matricule} | ${el.nom} ${el.prenoms}`).join('\n');
       const matiereLabel = MATIERES_PRIMAIRE.find(m => m.id === scanMatiere)?.label || scanMatiere;
+      const evaluationLabel = EVALUATIONS.find(ev => ev.id === scanEvaluation)?.label || scanEvaluation;
 
-      const promptText = `Tu analyses la photo d'une feuille de notes (manuscrite ou imprimée) d'une classe de primaire au Bénin, pour la matière "${matiereLabel}".
+      const promptText = `Tu analyses la photo d'une feuille de notes (manuscrite ou imprimée) d'une classe de primaire au Bénin, pour la matière "${matiereLabel}", dans le cadre de l'"${evaluationLabel}".
 Voici la liste des élèves de la classe, au format "matricule | Nom Prénoms" :
 ${roster}
 
@@ -861,14 +933,16 @@ Utilise null pour perf si elle n'est pas visible sur la feuille. Si tu ne peux p
 
     setNotes(prev => {
       const classData = { ...(prev[selectedClassId] || {}) };
-      const matiereData = { ...(classData[scanMatiere] || {}) };
+      const evalData = { ...(classData[scanEvaluation] || {}) };
+      const matiereData = { ...(evalData[scanMatiere] || {}) };
       toApply.forEach(r => {
         matiereData[r.studentId] = {
           note: parseFloat(r.note),
           perf: r.perf !== '' ? parseFloat(r.perf) : undefined
         };
       });
-      classData[scanMatiere] = matiereData;
+      evalData[scanMatiere] = matiereData;
+      classData[scanEvaluation] = evalData;
       return { ...prev, [selectedClassId]: classData };
     });
 
@@ -876,7 +950,7 @@ Utilise null pour perf si elle n'est pas visible sur la feuille. Si tu ne peux p
     resetScan();
   };
 
-  // --- SAISIE VOCALE DÉDIÉE À L'ENRÔLEMENT (champs texte, pas de chiffres) ---
+  // --- SAISIE VOCALE DÉDIÉE À L'ENRÔLEMENT ---
   const handleEnrolVoiceField = (field) => {
     const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
     if (!SpeechRecognition) {
@@ -954,7 +1028,6 @@ Utilise null pour perf si elle n'est pas visible sur la feuille. Si tu ne peux p
     triggerNotif("Candidat retiré de la liste d'enrôlement.");
   };
 
-  // --- SCANNER IA DÉDIÉ À L'ENRÔLEMENT (séparé du scanner de notes) ---
   const handleEnrolScanFileSelected = (e) => {
     const file = e.target.files?.[0];
     e.target.value = '';
@@ -1097,7 +1170,13 @@ Si une information est illisible ou absente, mets une chaîne vide "" pour ce ch
     const url = URL.createObjectURL(blob);
     const link = document.createElement("a");
     link.setAttribute("href", url);
-    link.setAttribute("download", `EducMaster_Enrolement_${(activeClass?.niveau || 'Classe')}_Import.xlsx`);
+
+    const anneeScolaire = '20252026';
+    const etablissementSlug = slugifyForFilename(user.etablissement) || 'ecole';
+    const niveauSlug = slugifyForFilename(activeClass?.niveau || 'Classe');
+    const timestamp = Date.now();
+    link.setAttribute("download", `${timestamp}_enrolement_${anneeScolaire}${etablissementSlug}${niveauSlug}.xlsx`);
+
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
@@ -1105,12 +1184,6 @@ Si une information est illisible ou absente, mets une chaîne vide "" pour ce ch
     triggerNotif("Fichier Excel (.xlsx) d'enrôlement généré avec succès !", 'success');
   };
 
-  // --- VERROUILLAGE DE L'ÉTABLISSEMENT (première barrière anti-abus côté client) ---
-  // Empêche un même compte de changer d'établissement à volonté pour faire de la
-  // prestation commerciale pour plusieurs écoles avec une seule licence.
-  // NOTE : ce verrou est une protection UX de premier niveau ; l'application
-  // stricte (infalsifiable) doit être faite côté serveur, en associant
-  // l'établissement à la clé de licence Chariow lors de son activation.
   const handleLockEtablissement = () => {
     if (!user.etablissement.trim()) {
       triggerNotif("Veuillez renseigner le nom de votre établissement avant de verrouiller.", 'error');
@@ -1131,7 +1204,7 @@ Si une information est illisible ou absente, mets une chaîne vide "" pour ce ch
   };
 
   // ==========================================================
-  // LANDING PAGE (affichée avant l'entrée dans le tableau de bord)
+  // LANDING PAGE
   // ==========================================================
   if (!hasEnteredApp) {
     return (
@@ -1342,6 +1415,21 @@ Si une information est illisible ou absente, mets une chaîne vide "" pour ce ch
           </div>
 
           <div className="flex items-center gap-2">
+            <a
+              href="https://mastanote-secondaire-ai.onrender.com"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="relative bg-gradient-to-r from-violet-600 to-fuchsia-600 text-white font-bold text-xs px-3 sm:px-3.5 py-2 rounded-xl flex items-center gap-1.5 hover:opacity-95 transition-all shadow-lg shadow-violet-900/20"
+              title="Accéder à MastaNote AI+ (Secondaire)"
+            >
+              <GraduationCap className="w-3.5 h-3.5 shrink-0" />
+              <span className="hidden sm:inline">MastaNote Secondaire</span>
+              <span className="sm:hidden">Secondaire</span>
+              <span className="absolute -top-2 -right-2 bg-amber-400 text-slate-950 text-[8px] font-black px-1.5 py-0.5 rounded-full uppercase shadow-md tracking-wide">
+                Nouveau
+              </span>
+            </a>
+
             <button
               onClick={handleOpenFiches}
               className="bg-gradient-to-r from-amber-500 to-orange-500 text-slate-950 font-bold text-xs px-3.5 py-2 rounded-xl flex items-center gap-1.5 hover:opacity-95 transition-all shadow-lg shadow-orange-500/10"
@@ -1601,25 +1689,45 @@ Si une information est illisible ou absente, mets une chaîne vide "" pour ce ch
                     <Camera className="w-4 h-4" />
                     Scanner une feuille
                   </button>
-                  <button onClick={exportToEducMaster} className="bg-gradient-to-r from-emerald-500 to-teal-500 text-slate-950 font-black text-sm px-5 py-3 rounded-xl flex items-center justify-center gap-2 transition-all shadow-lg shadow-emerald-500/10">
-                    <Download className="w-4 h-4" />
-                    Exporter EducMaster (.csv)
-                  </button>
+                  <div className="flex flex-col items-center gap-1">
+                    <button onClick={exportToEducMaster} className="w-full bg-gradient-to-r from-emerald-500 to-teal-500 text-slate-950 font-black text-sm px-5 py-3 rounded-xl flex items-center justify-center gap-2 transition-all shadow-lg shadow-emerald-500/10">
+                      <Download className="w-4 h-4" />
+                      Exporter EducMaster (.xlsx)
+                    </button>
+                    {isTrial && (
+                      <span className="text-[10px] text-slate-500">
+                        Export d'essai : {user.exportUsed ? '1/1 utilisé' : '0/1'}
+                      </span>
+                    )}
+                  </div>
                 </div>
               </div>
             </div>
 
-            <div className="space-y-3">
-              <h3 className="text-xs font-bold text-slate-400 uppercase tracking-widest">Aperçu rapide par matière</h3>
-              <div className="flex gap-2 overflow-x-auto pb-2 scrollbar-hide">
-                {MATIERES_PRIMAIRE.map(m => (
-                  <button
-                    key={m.id} onClick={() => setActiveMatiere(m.id)}
-                    className={`px-3 py-2 text-xs font-bold rounded-xl border shrink-0 transition-all ${
-                      activeMatiere === m.id ? 'bg-indigo-500/10 border-indigo-500 text-indigo-400' : 'bg-slate-950 border-slate-800/80 text-slate-400 hover:text-slate-300'
-                    }`}
-                  >{m.label}</button>
-                ))}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div className="space-y-2">
+                <h3 className="text-xs font-bold text-slate-400 uppercase tracking-widest">Matière</h3>
+                <div className="flex gap-2 overflow-x-auto pb-2 scrollbar-hide">
+                  {MATIERES_PRIMAIRE.map(m => (
+                    <button
+                      key={m.id} onClick={() => setActiveMatiere(m.id)}
+                      className={`px-3 py-2 text-xs font-bold rounded-xl border shrink-0 transition-all ${
+                        activeMatiere === m.id ? 'bg-indigo-500/10 border-indigo-500 text-indigo-400' : 'bg-slate-950 border-slate-800/80 text-slate-400 hover:text-slate-300'
+                      }`}
+                    >{m.label}</button>
+                  ))}
+                </div>
+              </div>
+
+              <div className="space-y-2">
+                <h3 className="text-xs font-bold text-slate-400 uppercase tracking-widest">Type d'évaluation</h3>
+                <select
+                  value={activeEvaluation}
+                  onChange={(e) => setActiveEvaluation(e.target.value)}
+                  className="w-full bg-slate-900 border border-slate-800 text-slate-200 text-sm font-bold rounded-xl px-3 py-2 focus:outline-none focus:border-indigo-500"
+                >
+                  {EVALUATIONS.map(ev => (<option key={ev.id} value={ev.id}>{ev.label}</option>))}
+                </select>
               </div>
             </div>
 
@@ -1658,7 +1766,7 @@ Si une information est illisible ou absente, mets une chaîne vide "" pour ce ch
               <div className="bg-slate-950 border border-slate-800/80 rounded-2xl p-5 lg:col-span-2">
                 <h4 className="font-bold text-white mb-4 flex items-center gap-2">
                   <FileSpreadsheet className="text-indigo-400 w-5 h-5" />
-                  Notes de {MATIERES_PRIMAIRE.find(m => m.id === activeMatiere)?.label}
+                  Notes de {MATIERES_PRIMAIRE.find(m => m.id === activeMatiere)?.label} — {EVALUATIONS.find(ev => ev.id === activeEvaluation)?.label}
                 </h4>
                 <div className="overflow-x-auto">
                   <table className="w-full text-left text-sm text-slate-300">
@@ -1673,7 +1781,7 @@ Si une information est illisible ou absente, mets une chaîne vide "" pour ce ch
                     </thead>
                     <tbody className="divide-y divide-slate-800/50">
                       {activeClass?.eleves.map(el => {
-                        const noteData = notes[selectedClassId]?.[activeMatiere]?.[el.id] || {};
+                        const noteData = notes[selectedClassId]?.[activeEvaluation]?.[activeMatiere]?.[el.id] || {};
                         const n = noteData.note;
                         const p = noteData.perf;
                         return (
@@ -1707,7 +1815,7 @@ Si une information est illisible ou absente, mets une chaîne vide "" pour ce ch
                     Diagnostics
                   </h4>
                   <p className="text-xs text-slate-400 leading-relaxed">
-                    Les indicateurs ci-dessous révèlent la performance d'apprentissage pour la matière <strong className="text-indigo-300">{MATIERES_PRIMAIRE.find(m => m.id === activeMatiere)?.label}</strong>.
+                    Les indicateurs ci-dessous révèlent la performance d'apprentissage pour <strong className="text-indigo-300">{MATIERES_PRIMAIRE.find(m => m.id === activeMatiere)?.label}</strong> — <strong className="text-indigo-300">{EVALUATIONS.find(ev => ev.id === activeEvaluation)?.label}</strong>.
                   </p>
                 </div>
                 <div className="space-y-3">
@@ -1741,15 +1849,28 @@ Si une information est illisible ou absente, mets une chaîne vide "" pour ce ch
               </span>
             </div>
 
-            <div className="bg-slate-950 border border-slate-800/80 p-2.5 rounded-2xl">
-              <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1.5 px-1">Matière de saisie</label>
-              <select
-                value={activeMatiere}
-                onChange={(e) => { setActiveMatiere(e.target.value); setCurrentSaisieIndex(0); }}
-                className="w-full bg-slate-900 border border-slate-800 text-slate-200 text-sm font-bold rounded-xl px-3 py-2 focus:outline-none focus:border-indigo-500"
-              >
-                {MATIERES_PRIMAIRE.map(m => (<option key={m.id} value={m.id}>{m.label}</option>))}
-              </select>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div className="bg-slate-950 border border-slate-800/80 p-2.5 rounded-2xl">
+                <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1.5 px-1">Matière de saisie</label>
+                <select
+                  value={activeMatiere}
+                  onChange={(e) => { setActiveMatiere(e.target.value); setCurrentSaisieIndex(0); }}
+                  className="w-full bg-slate-900 border border-slate-800 text-slate-200 text-sm font-bold rounded-xl px-3 py-2 focus:outline-none focus:border-indigo-500"
+                >
+                  {MATIERES_PRIMAIRE.map(m => (<option key={m.id} value={m.id}>{m.label}</option>))}
+                </select>
+              </div>
+
+              <div className="bg-slate-950 border border-indigo-500/30 p-2.5 rounded-2xl">
+                <label className="block text-[10px] font-bold text-indigo-400 uppercase tracking-wider mb-1.5 px-1">Type d'évaluation *</label>
+                <select
+                  value={activeEvaluation}
+                  onChange={(e) => { setActiveEvaluation(e.target.value); setCurrentSaisieIndex(0); }}
+                  className="w-full bg-slate-900 border border-indigo-500/50 text-slate-200 text-sm font-bold rounded-xl px-3 py-2 focus:outline-none focus:border-indigo-500"
+                >
+                  {EVALUATIONS.map(ev => (<option key={ev.id} value={ev.id}>{ev.label}</option>))}
+                </select>
+              </div>
             </div>
 
             <div className="bg-gradient-to-tr from-slate-950 to-slate-900 border border-slate-800/80 rounded-3xl p-6 shadow-xl relative overflow-hidden">
@@ -1812,7 +1933,7 @@ Si une information est illisible ou absente, mets une chaîne vide "" pour ce ch
             </div>
 
             <p className="text-center text-[10px] text-slate-500">
-              Matière de saisie en cours : <strong className="text-slate-400">{MATIERES_PRIMAIRE.find(m => m.id === activeMatiere)?.label}</strong>
+              Matière : <strong className="text-slate-400">{MATIERES_PRIMAIRE.find(m => m.id === activeMatiere)?.label}</strong> — Évaluation : <strong className="text-indigo-400">{EVALUATIONS.find(ev => ev.id === activeEvaluation)?.label}</strong>
             </p>
           </div>
         )}
@@ -1835,14 +1956,25 @@ Si une information est illisible ou absente, mets une chaîne vide "" pour ce ch
                 <p className="text-xs text-slate-400 max-w-md mx-auto">Prenez une photo (ou importez une image) d'une feuille de notes manuscrite ou imprimée : l'IA identifie les élèves et remplit les notes automatiquement.</p>
               </div>
 
-              <div>
-                <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1.5 px-1">Matière concernée</label>
-                <select
-                  value={scanMatiere} onChange={(e) => setScanMatiere(e.target.value)} disabled={scanStatus === 'review'}
-                  className="w-full bg-slate-900 border border-slate-800 text-slate-200 text-sm font-bold rounded-xl px-3 py-2.5 focus:outline-none focus:border-indigo-500 disabled:opacity-50"
-                >
-                  {MATIERES_PRIMAIRE.map(m => (<option key={m.id} value={m.id}>{m.label}</option>))}
-                </select>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1.5 px-1">Matière concernée</label>
+                  <select
+                    value={scanMatiere} onChange={(e) => setScanMatiere(e.target.value)} disabled={scanStatus === 'review'}
+                    className="w-full bg-slate-900 border border-slate-800 text-slate-200 text-sm font-bold rounded-xl px-3 py-2.5 focus:outline-none focus:border-indigo-500 disabled:opacity-50"
+                  >
+                    {MATIERES_PRIMAIRE.map(m => (<option key={m.id} value={m.id}>{m.label}</option>))}
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-[10px] font-bold text-indigo-400 uppercase tracking-wider mb-1.5 px-1">Type d'évaluation *</label>
+                  <select
+                    value={scanEvaluation} onChange={(e) => setScanEvaluation(e.target.value)} disabled={scanStatus === 'review'}
+                    className="w-full bg-slate-900 border border-indigo-500/50 text-slate-200 text-sm font-bold rounded-xl px-3 py-2.5 focus:outline-none focus:border-indigo-500 disabled:opacity-50"
+                  >
+                    {EVALUATIONS.map(ev => (<option key={ev.id} value={ev.id}>{ev.label}</option>))}
+                  </select>
+                </div>
               </div>
 
               <input ref={cameraInputRef} type="file" accept="image/*" capture="environment" onChange={handleScanFileSelected} className="hidden" />
@@ -2083,7 +2215,6 @@ Si une information est illisible ou absente, mets une chaîne vide "" pour ce ch
               <p className="text-xs text-slate-400 max-w-md mx-auto">Inscrivez de nouveaux élèves au format exact attendu par EducMaster pour l'enrôlement (le matricule sera généré par EducMaster après validation).</p>
             </div>
 
-            {/* --- SCANNER IA DÉDIÉ À L'ENRÔLEMENT --- */}
             <div className="bg-slate-950 border border-slate-800/80 rounded-3xl p-5 space-y-4">
               <h4 className="font-bold text-white text-sm flex items-center gap-2">
                 <Camera className="text-indigo-400 w-4 h-4" />
@@ -2200,7 +2331,6 @@ Si une information est illisible ou absente, mets une chaîne vide "" pour ce ch
               )}
             </div>
 
-            {/* --- FORMULAIRE MANUEL AVEC SAISIE VOCALE PAR CHAMP --- */}
             <div className="bg-slate-950 border border-slate-800/80 rounded-3xl p-5 space-y-4">
               <h4 className="font-bold text-white text-sm flex items-center gap-2">
                 <Mic className="text-indigo-400 w-4 h-4" />
@@ -2283,7 +2413,6 @@ Si une information est illisible ou absente, mets une chaîne vide "" pour ce ch
               </button>
             </div>
 
-            {/* --- LISTE DES CANDIDATS À ENRÔLER --- */}
             <div className="bg-slate-950 border border-slate-800/80 rounded-3xl p-5 space-y-4">
               <div className="flex items-center justify-between">
                 <h4 className="font-bold text-white text-sm flex items-center gap-2">
@@ -2292,7 +2421,7 @@ Si une information est illisible ou absente, mets une chaîne vide "" pour ce ch
                 </h4>
                 <button onClick={exportEnrolementsToEducMaster} className="bg-gradient-to-r from-emerald-500 to-teal-500 text-slate-950 font-black text-xs px-4 py-2 rounded-xl flex items-center gap-1.5 shadow-lg shadow-emerald-500/10 hover:opacity-95 transition-all">
                   <Download className="w-3.5 h-3.5" />
-                  Exporter (.csv)
+                  Exporter (.xlsx)
                 </button>
               </div>
 
@@ -2432,11 +2561,12 @@ Si une information est illisible ou absente, mets une chaîne vide "" pour ce ch
               <button
                 onClick={() => {
                   if (confirm("Voulez-vous vraiment réinitialiser l'application ? Cette action est irréversible.")) {
+                    localStorage.removeItem(STORAGE_KEY);
                     setClasses([{ id: 'class-1', nom: 'CM2 Émeraude', niveau: 'CM2', eleves: ELEVES_INITIAL_CM2 }]);
                     setNotes({});
                     setSelectedClassId('class-1');
                     setCurrentSaisieIndex(0);
-                    setUser({ nom: 'Enseignant Bénin', tel: '0197000000', statut_abonnement: 'demo', planId: null, plan: null, expireLe: null, etablissement: '', etablissementVerrouille: false });
+                    setUser({ nom: 'Enseignant Bénin', tel: '0197000000', statut_abonnement: 'demo', planId: null, plan: null, expireLe: null, etablissement: '', etablissementVerrouille: false, exportUsed: false });
                     triggerNotif("Application réinitialisée.");
                   }
                 }}
