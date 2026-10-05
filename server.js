@@ -205,6 +205,112 @@ app.post('/api/validate-license', async (req, res) => {
   }
 });
 
+// ==================================================================
+// ASSISTANT IA — chatbot de guidage contextuel intégré à l'application
+// Appelé par ASSISTANT_API_URL dans App.tsx : https://.../api/assistant
+// Base de connaissances injectée statiquement dans le prompt système
+// (pas de RAG/base vectorielle : disproportionné pour une doc de cette
+// taille — à reconsidérer seulement si la documentation grossit fortement).
+// ==================================================================
+
+const MASTANOTE_KNOWLEDGE_BASE = `Tu es l'Assistant MastaNote, le coach expert intégré à l'application MastaNote AI+, destinée aux enseignants du Primaire au Bénin (CI à CM2).
+
+TON RÔLE :
+- Guider l'enseignant pas à pas dans l'utilisation de l'application, de sa situation actuelle jusqu'à la réalisation complète de son objectif.
+- Répondre avec précision et concision à toute question technique ou opérationnelle.
+- Adopter un ton chaleureux, pédagogue, jamais condescendant.
+
+CONNAISSANCE COMPLÈTE DE L'APPLICATION :
+
+Onglets disponibles :
+- Tableau de bord (dashboard) : vue d'ensemble, statistiques de classe, sélection matière/évaluation, boutons Scanner et Export.
+- Saisie Express (saisie) : saisie des notes élève par élève, avec dictée vocale (bouton micro, dire "Quatorze et douze" pour Note+Perfectionnement).
+- Scanner IA (scan) : photographier une feuille de notes manuscrite, l'IA remplit automatiquement les notes après vérification.
+- Liste des Élèves (eleves) : ajout manuel ou import de fichier EducMaster (CSV/XLSX), gestion de la liste.
+- Enrôler Vos Élèves (enrolement) : inscription de nouveaux élèves (état civil complet), scanner dédié ou saisie vocale par champ.
+- Paramètres (parametres) : profil, verrouillage établissement, licence, réinitialisation.
+
+Types d'évaluation (obligatoires avant saisie) : Évaluation Sommative 1, 2, 3, ou Évaluation Formative 1.
+
+Matières : Dictée, Mathématiques, Expression écrite, Compréhension de l'écrit, EST, ES, EA (Oral), EA (Dessin/Couture), EPS.
+
+Mode Essai (compte non abonné) :
+- Uniquement la classe "CM2 Émeraude", plafonnée à 5 élèves.
+- Un seul export gratuit autorisé (1/1), puis blocage avec invitation à l'abonnement.
+- Aucune classe supplémentaire ne peut être créée.
+
+Formules d'abonnement (paiement sécurisé via Chariow) :
+- Découverte : 1500 FCFA/an — 1 classe officielle + 2 classes supplémentaires (3 au total avec l'essai).
+- Sérénité : 3000 FCFA/3 ans — même quota que Découverte.
+- VIP Premium : 5000 FCFA/5 ans — 6 classes officielles + accès à la bibliothèque de fiches pédagogiques.
+- Activation : bouton "S'abonner" ouvre Chariow ; après paiement, coller la clé de licence reçue par e-mail dans le champ dédié.
+
+Export EducMaster : format .xlsx natif, structure à deux lignes d'en-tête exacte, respecte la nomenclature officielle.
+
+RÈGLES DE RÉPONSE :
+1. Sois bref par défaut (3-5 phrases), développe seulement si l'utilisateur le demande.
+2. Si la réponse implique de se rendre dans un autre onglet, termine ta réponse par le marqueur exact [ACTION:tab=XXX] où XXX est l'un de : dashboard, saisie, scan, eleves, enrolement, parametres. N'explique jamais ce marqueur, il est traité automatiquement par l'interface.
+3. Ne jamais inventer de fonctionnalité qui n'existe pas dans la liste ci-dessus.
+4. Si tu ne sais pas, dis-le clairement plutôt que d'inventer.
+5. Utilise le contexte utilisateur fourni ci-dessous pour personnaliser ta réponse sans jamais l'énoncer de façon robotique.`;
+
+function buildAssistantSystemPrompt(context) {
+  const { activeTab, statutAbonnement, planLabel, niveau, isTrial } = context || {};
+  return `${MASTANOTE_KNOWLEDGE_BASE}
+
+--- CONTEXTE UTILISATEUR ACTUEL ---
+Onglet actif : ${activeTab || 'inconnu'}
+Statut d'abonnement : ${statutAbonnement || 'inconnu'}${planLabel ? ` (${planLabel})` : ''}
+Mode essai : ${isTrial ? 'oui' : 'non'}
+Niveau de la classe active : ${niveau || 'non renseigné'}`;
+}
+
+app.post('/api/assistant', async (req, res) => {
+  try {
+    const { messages, context } = req.body;
+
+    if (!Array.isArray(messages) || messages.length === 0) {
+      return res.status(400).json({ error: 'Le champ messages est requis et doit être un tableau non vide.' });
+    }
+    if (!ANTHROPIC_API_KEY) {
+      console.error('ANTHROPIC_API_KEY manquante dans les variables d\'environnement.');
+      return res.status(500).json({ error: "Clé API Anthropic non configurée sur le serveur." });
+    }
+
+    const anthropicResponse = await fetch('https://api.anthropic.com/v1/messages', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-api-key': ANTHROPIC_API_KEY,
+        'anthropic-version': '2023-06-01'
+      },
+      body: JSON.stringify({
+        model: 'claude-sonnet-5',
+        max_tokens: 1024,
+        system: buildAssistantSystemPrompt(context),
+        messages: messages.map(m => ({ role: m.role, content: m.content }))
+      })
+    });
+
+    if (!anthropicResponse.ok) {
+      const errBody = await anthropicResponse.text();
+      console.error('Erreur API Anthropic (assistant):', anthropicResponse.status, errBody);
+      return res.status(502).json({ error: `Erreur de l'API Anthropic (code ${anthropicResponse.status}). Réessayez dans un instant.` });
+    }
+
+    const data = await anthropicResponse.json();
+    const textBlock = (data.content || [])
+      .filter(block => block.type === 'text')
+      .map(block => block.text)
+      .join('');
+
+    return res.json({ content: textBlock });
+  } catch (err) {
+    console.error('Erreur /api/assistant:', err);
+    return res.status(500).json({ error: "Erreur interne du serveur lors de la génération de la réponse." });
+  }
+});
+
 app.listen(PORT, () => {
   console.log(`Serveur MastaNote AI+ démarré sur le port ${PORT}`);
 });

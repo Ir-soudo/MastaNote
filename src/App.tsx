@@ -4,7 +4,7 @@ import {
   BookOpen, Users, Plus, Download, Mic, MicOff, CheckCircle, CreditCard,
   TrendingUp, Award, AlertTriangle, FileSpreadsheet, Trash2, ChevronRight,
   ArrowLeft, Settings, Lock, Check, Camera, Sparkles, Image as ImageIcon,
-  RotateCcw, Upload, Library, GraduationCap
+  RotateCcw, Upload, Library, GraduationCap, Bot, Send
 } from 'lucide-react';
 
 // --- CONFIGURATION ET COMPOSANTS PRINCIPAUX ---
@@ -79,8 +79,21 @@ const ABONNEMENT_PLANS = [
 
 const SCAN_API_URL = 'https://mastanote-backend-j9hh.onrender.com/api/scan';
 const LICENSE_API_URL = 'https://mastanote-backend-j9hh.onrender.com/api/validate-license';
+const ASSISTANT_API_URL = 'https://mastanote-backend-j9hh.onrender.com/api/assistant';
 const FICHES_PEDAGOGIQUES_URL = 'https://soudoboutik-ebook.mychariow.shop';
 const BOUTIQUE_URL = 'https://xjqdkqwz.mychariow.shop';
+
+// --- ASSISTANT IA : suggestions contextuelles par onglet + onglets valides pour le deep-linking ---
+const VALID_TABS = ['dashboard', 'saisie', 'scan', 'eleves', 'enrolement', 'parametres'];
+
+const ASSISTANT_QUICK_REPLIES = {
+  dashboard: ["Comment saisir mes notes ?", "Comment exporter vers EducMaster ?", "C'est quoi le mode essai ?"],
+  saisie: ["Comment utiliser la saisie vocale ?", "Que veut dire 'Perfectionnement' ?", "Comment changer de type d'évaluation ?"],
+  scan: ["Comment scanner une feuille de notes ?", "Pourquoi mes notes ne sont pas détectées ?", "Le scanner ne répond pas, que faire ?"],
+  eleves: ["Comment importer ma liste EducMaster ?", "Comment ajouter un élève manuellement ?", "Quel format de fichier est accepté ?"],
+  enrolement: ["Comment enrôler un nouvel élève ?", "Le matricule est-il obligatoire ?", "Comment scanner une fiche d'enrôlement ?"],
+  parametres: ["Comment activer ma licence ?", "Comment verrouiller mon établissement ?", "Quelles sont les formules d'abonnement ?"]
+};
 
 const ELEVES_INITIAL_CM2 = [
   { id: '1', matricule: '24-CM2-001', nom: 'ABALO', prenoms: 'Sena Jean' },
@@ -191,6 +204,12 @@ export default function App() {
   const [notif, setNotif] = useState(null);
   const [updateInfo, setUpdateInfo] = useState(null);
 
+  // --- ASSISTANT IA (chatbot de guidage contextuel) ---
+  const [assistantOpen, setAssistantOpen] = useState(false);
+  const [assistantMessages, setAssistantMessages] = useState([]);
+  const [assistantInput, setAssistantInput] = useState('');
+  const [assistantLoading, setAssistantLoading] = useState(false);
+
   const [scanMatiere, setScanMatiere] = useState('maths');
   const [scanEvaluation, setScanEvaluation] = useState('sommative1');
   const [scanImage, setScanImage] = useState(null);
@@ -224,6 +243,7 @@ export default function App() {
   const importFileInputRef = useRef(null);
   const enrolCameraInputRef = useRef(null);
   const enrolGalleryInputRef = useRef(null);
+  const assistantScrollRef = useRef(null);
 
   const isPremiumPlan = user.statut_abonnement === 'actif' && user.planId === '5ans';
 
@@ -240,6 +260,69 @@ export default function App() {
     setNotif({ message, type });
     setTimeout(() => setNotif(null), 4000);
   };
+
+  // --- ASSISTANT IA : extraction du marqueur de deep-linking [ACTION:tab=xxx] ---
+  const parseAssistantContent = (content) => {
+    const match = content.match(/\[ACTION:tab=([a-z]+)\]/i);
+    if (match && VALID_TABS.includes(match[1].toLowerCase())) {
+      return { text: content.replace(match[0], '').trim(), actionTab: match[1].toLowerCase() };
+    }
+    return { text: content, actionTab: null };
+  };
+
+  const handleSendAssistantMessage = async (textOverride) => {
+    const text = (textOverride ?? assistantInput).trim();
+    if (!text || assistantLoading) return;
+
+    const userMsg = { role: 'user', content: text };
+    const updatedHistory = [...assistantMessages, userMsg];
+    setAssistantMessages(updatedHistory);
+    setAssistantInput('');
+    setAssistantLoading(true);
+
+    try {
+      const response = await fetch(ASSISTANT_API_URL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          messages: updatedHistory,
+          context: {
+            activeTab,
+            statutAbonnement: user.statut_abonnement,
+            planLabel: user.plan,
+            niveau: activeClass?.niveau,
+            isTrial
+          }
+        })
+      });
+
+      if (!response.ok) {
+        const errData = await response.json().catch(() => ({}));
+        throw new Error(errData.error || `Erreur serveur : ${response.status}`);
+      }
+
+      const data = await response.json();
+      const replyText = typeof data.content === 'string' && data.content.trim()
+        ? data.content
+        : "Désolé, je n'ai pas pu générer de réponse. Réessayez.";
+
+      setAssistantMessages(prev => [...prev, { role: 'assistant', content: replyText }]);
+    } catch (err) {
+      console.error(err);
+      setAssistantMessages(prev => [...prev, {
+        role: 'assistant',
+        content: `Erreur : ${err?.message || "une erreur inconnue est survenue"}. Vérifiez votre connexion et réessayez dans quelques instants.`
+      }]);
+    } finally {
+      setAssistantLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    if (assistantScrollRef.current) {
+      assistantScrollRef.current.scrollTop = assistantScrollRef.current.scrollHeight;
+    }
+  }, [assistantMessages, assistantLoading]);
 
   useEffect(() => {
     const handleUpdateAvailable = (e) => {
@@ -2586,6 +2669,102 @@ Si une information est illisible ou absente, mets une chaîne vide "" pour ce ch
           </div>
         </div>
       </footer>
+
+      {/* --- ASSISTANT IA : bouton flottant --- */}
+      {!assistantOpen && (
+        <button
+          onClick={() => setAssistantOpen(true)}
+          className="fixed bottom-5 right-5 z-40 bg-gradient-to-br from-indigo-600 to-purple-600 text-white p-4 rounded-full shadow-2xl shadow-indigo-900/40 hover:scale-105 transition-transform"
+          title="Assistant MastaNote"
+        >
+          <Bot className="w-6 h-6" />
+        </button>
+      )}
+
+      {/* --- ASSISTANT IA : fenêtre de discussion --- */}
+      {assistantOpen && (
+        <div className="fixed inset-0 sm:inset-auto sm:bottom-5 sm:right-5 z-50 flex items-end sm:items-stretch justify-center sm:justify-end bg-black/40 sm:bg-transparent">
+          <div className="bg-slate-950 border border-slate-800 w-full sm:w-[380px] h-[85vh] sm:h-[600px] sm:max-h-[80vh] rounded-t-3xl sm:rounded-3xl shadow-2xl flex flex-col overflow-hidden">
+            <div className="bg-gradient-to-r from-indigo-600 to-purple-600 px-4 py-3.5 flex items-center justify-between shrink-0">
+              <div className="flex items-center gap-2">
+                <Bot className="w-5 h-5 text-white" />
+                <span className="text-white font-bold text-sm">Assistant MastaNote</span>
+              </div>
+              <button onClick={() => setAssistantOpen(false)} className="text-white/80 hover:text-white text-lg font-bold">✕</button>
+            </div>
+
+            <div ref={assistantScrollRef} className="flex-1 overflow-y-auto px-4 py-4 space-y-3">
+              {assistantMessages.length === 0 && (
+                <div className="text-center text-slate-500 text-xs py-6">
+                  👋 Bonjour ! Je suis votre assistant MastaNote. Posez-moi une question ou choisissez une suggestion ci-dessous.
+                </div>
+              )}
+              {assistantMessages.map((msg, i) => {
+                const { text, actionTab } = msg.role === 'assistant' ? parseAssistantContent(msg.content) : { text: msg.content, actionTab: null };
+                return (
+                  <div key={i} className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
+                    <div className={`max-w-[85%] rounded-2xl px-3.5 py-2.5 text-sm ${
+                      msg.role === 'user' ? 'bg-indigo-600 text-white' : 'bg-slate-800 text-slate-200'
+                    }`}>
+                      <p className="whitespace-pre-wrap">{text}</p>
+                      {actionTab && (
+                        <button
+                          onClick={() => { setActiveTab(actionTab); setAssistantOpen(false); }}
+                          className="mt-2 bg-white/10 hover:bg-white/20 text-xs font-bold px-3 py-1.5 rounded-lg transition-colors"
+                        >
+                          Aller à cet écran →
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
+              {assistantLoading && (
+                <div className="flex justify-start">
+                  <div className="bg-slate-800 text-slate-400 rounded-2xl px-3.5 py-2.5 text-sm flex items-center gap-1.5">
+                    <span className="w-1.5 h-1.5 bg-slate-500 rounded-full animate-bounce" style={{ animationDelay: '0ms' }} />
+                    <span className="w-1.5 h-1.5 bg-slate-500 rounded-full animate-bounce" style={{ animationDelay: '150ms' }} />
+                    <span className="w-1.5 h-1.5 bg-slate-500 rounded-full animate-bounce" style={{ animationDelay: '300ms' }} />
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {assistantMessages.length === 0 && (
+              <div className="px-4 pb-2 flex flex-wrap gap-1.5 shrink-0">
+                {(ASSISTANT_QUICK_REPLIES[activeTab] || ASSISTANT_QUICK_REPLIES.dashboard).map((q, i) => (
+                  <button
+                    key={i}
+                    onClick={() => handleSendAssistantMessage(q)}
+                    className="bg-slate-900 hover:bg-slate-800 border border-slate-800 text-slate-300 text-[11px] px-2.5 py-1.5 rounded-full transition-colors"
+                  >
+                    {q}
+                  </button>
+                ))}
+              </div>
+            )}
+
+            <div className="border-t border-slate-800 p-3 flex gap-2 shrink-0">
+              <input
+                type="text"
+                value={assistantInput}
+                onChange={(e) => setAssistantInput(e.target.value)}
+                onKeyDown={(e) => { if (e.key === 'Enter') handleSendAssistantMessage(); }}
+                placeholder="Posez votre question..."
+                disabled={assistantLoading}
+                className="flex-1 bg-slate-900 border border-slate-800 rounded-xl px-3.5 py-2.5 text-slate-200 text-sm focus:outline-none focus:border-indigo-500 disabled:opacity-60"
+              />
+              <button
+                onClick={() => handleSendAssistantMessage()}
+                disabled={assistantLoading || !assistantInput.trim()}
+                className="bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white p-2.5 rounded-xl transition-colors"
+              >
+                <Send className="w-4 h-4" />
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
     </div>
   );
