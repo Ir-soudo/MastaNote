@@ -14,10 +14,12 @@ app.use(express.json({ limit: '15mb' }));
 
 const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
 const GEMINI_API_BASE = 'https://generativelanguage.googleapis.com/v1beta';
-// Modèle gratuit avec support vision + texte. Si Google renomme/retire ce
-// modèle, vérifiez le nom exact disponible sur aistudio.google.com et
-// ajustez cette seule ligne.
-const GEMINI_MODEL = 'gemini-2.0-flash';
+// Modèle gratuit avec support vision + texte. Mis à jour le 05/10/2026 suite
+// au retrait de gemini-2.0-flash par Google (message d'erreur officiel
+// recommandant explicitement ce remplaçant). Si Google fait à nouveau
+// évoluer ses noms de modèles, vérifiez sur aistudio.google.com et ajustez
+// cette seule ligne.
+const GEMINI_MODEL = 'gemini-3.8-flash';
 
 const CHARIOW_SECRET_KEY = process.env.CHARIOW_SECRET_KEY; // clé secrète Chariow (sk_live_...), jamais côté client
 const CHARIOW_API_BASE = 'https://api.chariow.com/v1';
