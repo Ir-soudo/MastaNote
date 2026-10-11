@@ -40,7 +40,7 @@ const EVALUATIONS = [
   { id: 'formative1', label: 'Évaluation Formative 1', short: 'Formative 1' }
 ];
 
-// --- NOTE TOTALE = note de l'élève + note de performance (perfectionnement) ≤ PERF_MAX ---
+// --- NOTE TOTALE = note de composition + note de performance (perfectionnement) ≤ PERF_MAX ---
 const PERF_MAX = 2;
 
 const VENTILATION_STRATEGIES = [
@@ -50,6 +50,13 @@ const VENTILATION_STRATEGIES = [
 ];
 
 const MAX_SCAN_FILES = 5;
+
+// Rôle d'une image dans le registre : détection automatique ou choix manuel
+const SCAN_ROLES = [
+  { id: 'auto', label: 'Auto-détection' },
+  { id: 'referentiel', label: 'Page de garde (noms)' },
+  { id: 'notes', label: 'Page de notes' }
+];
 
 // --- CLASSE D'ESSAI (démo permanente, hors quota des classes créées) ---
 const TRIAL_CLASS_ID = 'class-1';
@@ -92,7 +99,7 @@ const VALID_TABS = ['dashboard', 'saisie', 'scan', 'eleves', 'enrolement', 'para
 const ASSISTANT_QUICK_REPLIES = {
   dashboard: ["Comment saisir mes notes ?", "Pourquoi EducMaster refuse mon fichier ?", "C'est quoi le mode essai ?"],
   saisie: ["Comment utiliser la saisie vocale ?", "Comment saisir la note totale ?", "Que veut dire 'Perfectionnement' ?"],
-  scan: ["Comment scanner plusieurs images ?", "Comment fonctionne « Toutes les matières » ?", "Pourquoi mes notes sont-elles ventilées ?"],
+  scan: ["Comment scanner un registre complet ?", "À quoi sert la page de garde ?", "Pourquoi mes notes sont-elles ventilées ?"],
   eleves: ["Comment importer ma liste EducMaster ?", "Qu'est-ce que le modèle EducMaster ?", "Un élève manque dans mon modèle, que faire ?"],
   enrolement: ["Comment enrôler un nouvel élève ?", "Le matricule est-il obligatoire ?", "Comment scanner une fiche d'enrôlement ?"],
   parametres: ["Comment activer ma licence ?", "Comment verrouiller mon établissement ?", "Quelles sont les formules d'abonnement ?"]
@@ -155,7 +162,7 @@ const toNum = (v) => {
   return Number.isFinite(n) ? n : null;
 };
 
-// Ventile une note TOTALE (note + perfectionnement) en { note, perf } avec perf ≤ PERF_MAX.
+// Ventile une note TOTALE (composition + performance) en { note, perf } avec perf ≤ PERF_MAX.
 // La somme note + perf est toujours égale au total saisi.
 const ventilateTotal = (total, strategy = 'proportionnelle') => {
   const t = clamp(round2(total), 0, 20);
@@ -274,36 +281,132 @@ const callScanApi = async (file, promptText) => {
   throw lastErr;
 };
 
-const buildScanPrompt = ({ mode, targetMatieres, roster, evaluationLabel }) => {
+// ---------------------------------------------------------
+// SCAN DE REGISTRE : prompt + rapprochement Numéro ➔ Élève
+// ---------------------------------------------------------
+
+// Prompt unique pour toutes les pages : la page de garde (Numéro ➔ Nom) et les pages de notes
+// (Numéro ➔ Matière ➔ Note). L'IA ne fait QUE lire ; la jonction par numéro est faite par l'application.
+const buildRegistrePrompt = ({ role, mode, targetMatieres, evaluationLabel }) => {
   const listeMatieres = targetMatieres.map(m => `- "${m.id}" = ${m.exportLabel}`).join('\n');
+  const consigneRole = role === 'referentiel'
+    ? 'Cette image est la PAGE DE GARDE (liste des élèves) : ne renvoie QUE des objets de type "r".'
+    : role === 'notes'
+      ? 'Cette image est une PAGE DE NOTES : ne renvoie QUE des objets de type "n".'
+      : "Détermine toi-même ce que contient l'image : une page peut contenir la liste des élèves, des notes, ou les deux.";
   const consigneMatieres = mode === 'all'
-    ? `Détecte AUTOMATIQUEMENT les matières présentes sur l'image (colonnes ou rubriques du registre) et ne renvoie que celles que tu vois. Les intitulés du registre peuvent différer légèrement (abréviations, ordre différent) : associe chacun à l'identifiant le plus proche de la liste.`
+    ? "Détecte AUTOMATIQUEMENT les matières présentes à partir des en-têtes de colonnes et ne renvoie que celles que tu vois. Les intitulés du registre peuvent différer légèrement (abréviations, ordre différent) : associe chacun à l'identifiant le plus proche."
     : `Ne renvoie QUE la matière "${targetMatieres[0].id}" (${targetMatieres[0].exportLabel}).`;
 
-  return `Tu analyses la photo d'un registre ou d'une feuille de notes (manuscrit ou imprimé) d'une classe de primaire au Bénin, pour l'"${evaluationLabel}".
+  return `Tu analyses la photo d'une page d'un registre d'appel et de notes d'une classe de primaire au Bénin (évaluation : "${evaluationLabel}").
 
-Liste des élèves de la classe, au format "matricule | Nom Prénoms" :
-${roster}
+Une page peut contenir :
+(A) la PAGE DE GARDE : une table Numéro d'ordre -> Nom et Prénom(s) de chaque élève ;
+(B) une PAGE DE NOTES : des numéros d'ordre (sans noms) avec, pour chaque matière, une ou plusieurs colonnes de notes.
+${consigneRole}
 
 Matières possibles (identifiant = libellé) :
 ${listeMatieres}
 
 ${consigneMatieres}
 
-Pour chaque élève reconnu avec certitude (par son nom, associé au matricule de la liste), relève pour chaque matière :
-- "note" : la note obtenue par l'élève,
-- "perf" : la note de perfectionnement (au maximum ${PERF_MAX}),
-- "total" : la note globale (note + perfectionnement).
-Ne remplis que ce qui est réellement écrit. Si UNE SEULE valeur est écrite pour une matière, mets-la dans "total". N'invente rien : omets les champs absents ou illisibles.
+Réponds UNIQUEMENT avec un tableau JSON compact (une seule ligne, sans markdown) contenant deux sortes d'objets :
+- pour chaque ligne de la liste des élèves : {"t":"r","n":<numéro>,"nom":"<Nom Prénom(s) tels qu'écrits>"}
+- pour chaque note lue : {"t":"n","m":"<identifiant de matière>","n":<numéro>,"note":<valeur>,"perf":<valeur>,"total":<valeur>}
 
-Réponds UNIQUEMENT avec un tableau JSON compact, sur une seule ligne, sans markdown, au format :
-[{"matricule":"24-CM2-001","nom":"ABALO Sena Jean","notes":{"dictee":{"total":15},"maths":{"note":13,"perf":2}}}]
-Ignore les élèves absents de la liste. Si rien n'est lisible, réponds [].`;
+Règles pour les notes :
+- "n" est le numéro d'ordre de la ligne (nombre entier), tel qu'écrit dans la colonne des numéros.
+- "note" = note de composition de l'élève ; "perf" = note de performance (au maximum ${PERF_MAX}) ; "total" = note globale (composition + performance).
+- Ne remplis QUE ce qui est réellement écrit. Si une seule valeur existe pour une matière, mets-la dans "total". Omets les champs absents ou illisibles.
+- La matière se déduit de l'en-tête de la colonne. Si aucun identifiant ne correspond, mets "m":null et recopie l'en-tête lu dans "l".
+- N'invente rien. Si rien n'est lisible, réponds [].
+
+Exemple : [{"t":"r","n":1,"nom":"ABALO Sena Jean"},{"t":"n","m":"dictee","n":1,"total":15},{"t":"n","m":"maths","n":1,"note":13,"perf":2}]`;
 };
 
-// ==========================================================
-// COMPOSANT PRINCIPAL
-// ==========================================================
+// Distance d'édition (tolère une faute de lecture de l'OCR dans un nom)
+const levenshtein = (a, b) => {
+  if (a === b) return 0;
+  const m = a.length, n = b.length;
+  if (!m) return n;
+  if (!n) return m;
+  let prev = Array.from({ length: n + 1 }, (_, j) => j);
+  for (let i = 1; i <= m; i++) {
+    const curr = [i];
+    for (let j = 1; j <= n; j++) {
+      curr[j] = Math.min(prev[j] + 1, curr[j - 1] + 1, prev[j - 1] + (a[i - 1] === b[j - 1] ? 0 : 1));
+    }
+    prev = curr;
+  }
+  return prev[n];
+};
+
+const nameTokens = (s) => normalizeName(s).split(' ').filter(Boolean);
+
+const tokensMatch = (a, b) => a === b || (Math.min(a.length, b.length) >= 5 && levenshtein(a, b) <= 1);
+
+// Combien de mots du nom le plus court se retrouvent dans le nom le plus long
+const nameOverlap = (tokensA, tokensB) => {
+  const [short, long] = tokensA.length <= tokensB.length ? [tokensA, tokensB] : [tokensB, tokensA];
+  const used = new Set();
+  let hits = 0;
+  short.forEach(t => {
+    const idx = long.findIndex((u, i) => !used.has(i) && tokensMatch(t, u));
+    if (idx !== -1) { used.add(idx); hits++; }
+  });
+  return { hits, shortLen: short.length, longLen: long.length };
+};
+
+// Retrouve l'élève de la classe correspondant à un nom lu sur la page de garde.
+// Retourne null si le nom est absent de la classe ou ambigu (jamais de rapprochement au hasard).
+const matchNameToStudent = (rawName, students, usedIds) => {
+  const tokens = nameTokens(rawName);
+  if (tokens.length === 0) return null;
+  const candidates = [];
+  students.forEach(el => {
+    if (usedIds.has(el.id)) return;
+    const ov = nameOverlap(tokens, nameTokens(`${el.nom} ${el.prenoms}`));
+    if (ov.shortLen > 0 && ov.hits === ov.shortLen) {
+      candidates.push({ el, hits: ov.hits, exact: ov.shortLen === ov.longLen });
+    }
+  });
+  if (candidates.length === 0) return null;
+  const exact = candidates.filter(c => c.exact);
+  if (exact.length === 1) return exact[0].el;
+  const pool = exact.length > 1 ? exact : candidates;
+  const best = Math.max(...pool.map(c => c.hits));
+  const top = pool.filter(c => c.hits === best);
+  return top.length === 1 ? top[0].el : null;
+};
+
+// Secours : retrouve une matière à partir d'un en-tête lu (si l'IA n'a pas donné d'identifiant valide).
+const matchMatiereFromLabel = (label) => {
+  const t = normalizeName(label);
+  if (!t) return null;
+  const words = t.split(' ');
+  if (t.includes('dictee')) return 'dictee';
+  if (words.includes('math') || words.includes('maths') || t.includes('mathematiques')) return 'maths';
+  if (t.includes('expression ecrite') || t.includes('exp ecrite')) return 'expression_ecrite';
+  if (t.includes('comprehension')) return 'comprehension';
+  if (t.includes('oral')) return 'ea_oral';
+  if (t.includes('dessin') || t.includes('couture')) return 'ea_dessin';
+  if (words.includes('eps') || t.includes('phys') || t.includes('sportive')) return 'eps';
+  if (words.includes('est') || t.includes('scien')) return 'est';
+  if (words.includes('es') || t.includes('sociale')) return 'es';
+  return null;
+};
+
+// Résumé court de ce qu'une image contient (affiché sur la vignette)
+const describeScanPage = (items) => {
+  const nbRef = items.filter(it => it.t === 'r').length;
+  const notes = items.filter(it => it.t === 'n');
+  const nbMat = new Set(notes.map(it => it.m || it.l || '?')).size;
+  if (nbRef > 0 && notes.length > 0) return `Noms ${nbRef} + notes ${notes.length}`;
+  if (nbRef > 0) return `Page de garde · ${nbRef} noms`;
+  if (notes.length > 0) return `Notes · ${nbMat} mat. · ${notes.length}`;
+  return 'Rien de lisible';
+};
+
 // --- ASSISTANT : liens cliquables, uniquement vers des domaines de confiance ---
 const SAFE_LINK_HOSTS = [
   'educmaster.bj',
@@ -331,6 +434,9 @@ const renderTextWithLinks = (text) => {
   );
 };
 
+// ==========================================================
+// COMPOSANT PRINCIPAL
+// ==========================================================
 export default function App() {
   const [hasEnteredApp, setHasEnteredApp] = useState(false);
   const [persisted] = useState(() => loadPersistedState());
@@ -432,13 +538,15 @@ export default function App() {
   const [assistantInput, setAssistantInput] = useState('');
   const [assistantLoading, setAssistantLoading] = useState(false);
 
-  // --- SCANNER IA (multi-images + mode toutes matières) ---
+  // --- SCANNER IA (registre multi-pages + mode toutes matières) ---
   const [scanMode, setScanMode] = useState('single'); // 'single' | 'all'
   const [scanMatiere, setScanMatiere] = useState('maths');
   const [scanEvaluation, setScanEvaluation] = useState('sommative1');
   const [scanFiles, setScanFiles] = useState([]);
   const [scanStatus, setScanStatus] = useState('idle'); // idle | analyzing | review | error
   const [scanResults, setScanResults] = useState([]);
+  const [scanReport, setScanReport] = useState(null);
+  const [scanUseRosterOrder, setScanUseRosterOrder] = useState(false);
   const [scanReviewMatiere, setScanReviewMatiere] = useState(null);
   const [scanErrorMsg, setScanErrorMsg] = useState('');
   const [scanProgressMsg, setScanProgressMsg] = useState('');
@@ -1091,19 +1199,35 @@ export default function App() {
   };
 
   // ==========================================================
-  // SCANNER IA — jusqu'à 5 images en parallèle + mode "Toutes les matières"
+  // SCANNER IA — registre multi-pages : page de garde (Numéro ➔ Nom)
+  // + pages de notes (Numéro ➔ Matière ➔ Note), jointure par le numéro
   // ==========================================================
   const resetScan = () => {
     setScanFiles([]);
     setScanStatus('idle');
     setScanResults([]);
+    setScanReport(null);
     setScanErrorMsg('');
     setScanProgressMsg('');
     setScanReviewMatiere(null);
   };
 
+  // Revient à la liste d'images (sans les perdre) pour changer un rôle puis relancer l'analyse.
+  const backToScanFiles = () => {
+    setScanStatus('idle');
+    setScanResults([]);
+    setScanReport(null);
+    setScanReviewMatiere(null);
+    setScanErrorMsg('');
+    setScanFiles(prev => prev.map(f => f.base64 ? { ...f, status: 'pending', message: '', empty: false } : f));
+  };
+
   const removeScanFile = (id) => {
     setScanFiles(prev => prev.filter(f => f.id !== id));
+  };
+
+  const setScanFileRole = (id, role) => {
+    setScanFiles(prev => prev.map(f => f.id === id ? { ...f, role } : f));
   };
 
   const handleScanFilesSelected = async (e) => {
@@ -1130,36 +1254,17 @@ export default function App() {
       const name = file.name || `Image ${idx + 1}`;
       try {
         const img = await fileToCompressedImage(file);
-        return { id, name, ...img, status: 'pending', message: '' };
+        return { id, name, ...img, role: 'auto', status: 'pending', message: '', empty: false };
       } catch (err) {
-        return { id, name, base64: null, mediaType: null, previewUrl: null, status: 'error', message: err?.message || 'Image illisible' };
+        return { id, name, base64: null, mediaType: null, previewUrl: null, role: 'auto', status: 'error', message: err?.message || 'Image illisible', empty: false };
       }
     }));
 
     setScanFiles(prev => [...prev, ...prepared].slice(0, MAX_SCAN_FILES));
     setScanStatus('idle');
     setScanResults([]);
+    setScanReport(null);
     setScanErrorMsg('');
-  };
-
-  const findStudentForScanItem = (item) => {
-    const mat = (item.matricule ?? '').toString().replace(/^'/, '').trim();
-    if (mat) {
-      const byMat = activeClass.eleves.find(el => el.matricule.trim() === mat);
-      if (byMat) return byMat;
-    }
-    const nm = normalizeName(item.nom);
-    if (nm.length >= 4) {
-      return (
-        activeClass.eleves.find(el => normalizeName(`${el.nom} ${el.prenoms}`) === nm) ||
-        activeClass.eleves.find(el => {
-          const full = normalizeName(`${el.nom} ${el.prenoms}`);
-          return full.includes(nm) || nm.includes(full);
-        }) ||
-        null
-      );
-    }
-    return null;
   };
 
   // Transforme les valeurs brutes lues (note / perf / total) en { note, perf, ventilated }.
@@ -1187,42 +1292,108 @@ export default function App() {
     return { note: clamp(note, 0, 20), perf, ventilated };
   };
 
-  // Fusionne les lectures de toutes les images (la première valeur non vide prime).
-  const mergeScanItems = (items, targetMatieres) => {
+  // Jointure du registre : 1) Numéro ➔ Nom (page de garde) ➔ élève de la classe,
+  // 2) Numéro ➔ Matière ➔ Note (pages de notes) ➔ cases de chaque élève.
+  const buildScanRowsFromRegistre = (items, targetMatieres) => {
     const targetIds = new Set(targetMatieres.map(m => m.id));
+    const students = activeClass.eleves;
+    const toInt = (v) => {
+      const n = toNum(v);
+      return n === null ? null : Math.round(n);
+    };
     const pick = (a, b) => (a !== null && a !== undefined && a !== '' ? a : b);
-    const byStudent = {};
 
-    items.forEach(item => {
-      if (!item || typeof item !== 'object') return;
-      const student = findStudentForScanItem(item);
-      if (!student) return;
-      const notesObj = item.notes && typeof item.notes === 'object' ? item.notes : {};
-      Object.entries(notesObj).forEach(([mid, rawValue]) => {
-        if (!targetIds.has(mid) || rawValue === null || rawValue === undefined) return;
-        const raw = (typeof rawValue === 'number' || typeof rawValue === 'string') ? { total: rawValue } : rawValue;
-        if (typeof raw !== 'object') return;
-        const slot = byStudent[student.id] || (byStudent[student.id] = {});
-        const prev = slot[mid] || {};
-        slot[mid] = {
-          note: pick(prev.note, raw.note),
-          perf: pick(prev.perf, raw.perf),
-          total: pick(prev.total, raw.total)
-        };
-      });
+    // 1) Référentiel : numéro -> élève de la classe
+    const refEntries = [];
+    const seenNumbers = new Set();
+    items.filter(it => it && it.t === 'r').forEach(it => {
+      const n = toInt(it.n);
+      const nom = (it.nom ?? '').toString().trim();
+      if (n === null || !nom || seenNumbers.has(n)) return;
+      seenNumbers.add(n);
+      refEntries.push({ n, nom });
+    });
+    refEntries.sort((a, b) => a.n - b.n);
+
+    const numeroToStudent = {};
+    const usedIds = new Set();
+    const refUnmatched = [];
+    refEntries.forEach(entry => {
+      const el = matchNameToStudent(entry.nom, students, usedIds);
+      if (el) {
+        numeroToStudent[entry.n] = el;
+        usedIds.add(el.id);
+      } else {
+        refUnmatched.push(`n° ${entry.n} — ${entry.nom}`);
+      }
     });
 
-    return activeClass.eleves.map(el => {
+    // Secours explicite (case cochée par l'utilisateur) : numéro = rang dans la liste de la classe
+    let usedRosterOrder = false;
+    if (refEntries.length === 0 && scanUseRosterOrder) {
+      students.forEach((el, idx) => { numeroToStudent[idx + 1] = el; });
+      usedRosterOrder = true;
+    }
+
+    // 2) Notes : (numéro, matière) -> valeurs lues
+    const raw = {};
+    const unmatchedNumbers = new Set();
+    const unknownColumns = new Set();
+    let notesRead = 0;
+
+    items.filter(it => it && it.t === 'n').forEach(it => {
+      let mid = null;
+      if (typeof it.m === 'string' && MATIERES_PRIMAIRE.some(m => m.id === it.m)) mid = it.m;
+      else mid = matchMatiereFromLabel(it.l || it.m);
+      if (!mid) {
+        const lib = (it.l || '').toString().trim();
+        if (lib) unknownColumns.add(lib);
+        return;
+      }
+      if (!targetIds.has(mid)) return;
+
+      const n = toInt(it.n);
+      if (n === null) return;
+      notesRead++;
+
+      const student = numeroToStudent[n];
+      if (!student) {
+        unmatchedNumbers.add(n);
+        return;
+      }
+      const key = `${student.id}|${mid}`;
+      const prev = raw[key] || {};
+      raw[key] = {
+        note: pick(prev.note, it.note),
+        perf: pick(prev.perf, it.perf),
+        total: pick(prev.total, it.total)
+      };
+    });
+
+    const rows = students.map(el => {
       const cells = {};
       targetMatieres.forEach(m => {
-        const raw = byStudent[el.id]?.[m.id];
-        const resolved = raw ? resolveScanCell(raw) : null;
+        const r = raw[`${el.id}|${m.id}`];
+        const resolved = r ? resolveScanCell(r) : null;
         cells[m.id] = resolved
           ? { note: String(resolved.note), perf: resolved.perf === null ? '' : String(resolved.perf), include: true, ventilated: resolved.ventilated }
           : { note: '', perf: '', include: false, ventilated: false };
       });
       return { studentId: el.id, matricule: el.matricule, nom: `${el.nom} ${el.prenoms}`, cells };
     });
+
+    const report = {
+      refRead: refEntries.length,
+      refMatched: refEntries.length - refUnmatched.length,
+      refUnmatched,
+      unmatchedNumbers: [...unmatchedNumbers].sort((a, b) => a - b),
+      unknownColumns: [...unknownColumns],
+      usedRosterOrder,
+      notesRead,
+      missingReferentiel: refEntries.length === 0 && !usedRosterOrder && notesRead > 0
+    };
+
+    return { rows, report };
   };
 
   const handleAnalyzeScan = async () => {
@@ -1232,6 +1403,7 @@ export default function App() {
     setScanStatus('analyzing');
     setScanErrorMsg('');
     setScanResults([]);
+    setScanReport(null);
     setScanProgressMsg(`Analyse de ${analyzable.length} image(s) en parallèle...`);
     const coldStartTimer = setTimeout(() => {
       setScanProgressMsg("Le serveur se réveille peut-être (jusqu'à 60 secondes après une période d'inactivité)... Merci de patienter.");
@@ -1241,20 +1413,20 @@ export default function App() {
       ? MATIERES_PRIMAIRE
       : MATIERES_PRIMAIRE.filter(m => m.id === scanMatiere);
     const evaluationLabel = EVALUATIONS.find(ev => ev.id === scanEvaluation)?.label || scanEvaluation;
-    const roster = activeClass.eleves.map(el => `${el.matricule} | ${el.nom} ${el.prenoms}`).join('\n');
-    const promptText = buildScanPrompt({ mode: scanMode, targetMatieres, roster, evaluationLabel });
 
-    setScanFiles(prev => prev.map(f => f.base64 ? { ...f, status: 'processing', message: '' } : f));
+    setScanFiles(prev => prev.map(f => f.base64 ? { ...f, status: 'processing', message: '', empty: false } : f));
 
     const outcomes = await Promise.all(analyzable.map(async (file) => {
       try {
-        const raw = await callScanApi(file, promptText);
-        const items = parseJsonArrayLenient(raw);
-        setScanFiles(prev => prev.map(f => f.id === file.id ? { ...f, status: 'done', message: `${items.length} élève(s) lu(s)` } : f));
+        const promptText = buildRegistrePrompt({ role: file.role, mode: scanMode, targetMatieres, evaluationLabel });
+        const rawText = await callScanApi(file, promptText);
+        const items = parseJsonArrayLenient(rawText).filter(it => it && typeof it === 'object');
+        const message = describeScanPage(items);
+        setScanFiles(prev => prev.map(f => f.id === file.id ? { ...f, status: 'done', message, empty: items.length === 0 } : f));
         return { ok: true, items };
       } catch (err) {
         console.error(err);
-        setScanFiles(prev => prev.map(f => f.id === file.id ? { ...f, status: 'error', message: err?.message || 'Échec' } : f));
+        setScanFiles(prev => prev.map(f => f.id === file.id ? { ...f, status: 'error', message: err?.message || 'Échec', empty: false } : f));
         return { ok: false, items: [] };
       }
     }));
@@ -1268,20 +1440,25 @@ export default function App() {
       return;
     }
 
-    const rows = mergeScanItems(outcomes.flatMap(o => o.items), targetMatieres);
+    const { rows, report } = buildScanRowsFromRegistre(outcomes.flatMap(o => o.items), targetMatieres);
     const firstDetected = targetMatieres.find(m => rows.some(r => r.cells[m.id].note !== ''));
     const detectedCount = rows.reduce((acc, r) => acc + targetMatieres.filter(m => r.cells[m.id].note !== '').length, 0);
 
     setScanResults(rows);
+    setScanReport(report);
     setScanReviewMatiere((firstDetected || targetMatieres[0]).id);
     setScanStatus('review');
 
     if (detectedCount === 0) {
-      triggerNotif("Aucune note n'a pu être identifiée automatiquement.", 'error');
+      if (report.missingReferentiel) {
+        triggerNotif("Aucune page de garde (noms) détectée : ajoutez-la, ou cochez « mes numéros suivent l'ordre de la classe ».", 'error');
+      } else {
+        triggerNotif("Aucune note n'a pu être rattachée à un élève. Vérifiez les détails ci-dessous.", 'error');
+      }
     } else {
       const failed = outcomes.filter(o => !o.ok).length;
       triggerNotif(
-        `${detectedCount} note(s) détectée(s). Vérifiez avant d'enregistrer.${failed > 0 ? ` (${failed} image(s) en échec)` : ''}`,
+        `${detectedCount} note(s) rattachée(s) aux élèves. Vérifiez avant d'enregistrer.${failed > 0 ? ` (${failed} image(s) en échec)` : ''}`,
         failed > 0 ? 'error' : 'success'
       );
     }
@@ -1663,7 +1840,7 @@ Si une information est illisible ou absente, mets une chaîne vide "" pour ce ch
       >
         {VENTILATION_STRATEGIES.map(s => (<option key={s.id} value={s.id}>{s.label}</option>))}
       </select>
-      <p className="text-[10px] text-slate-500 mt-1.5 px-1">Total = note + perfectionnement (maximum {PERF_MAX}).</p>
+      <p className="text-[10px] text-slate-500 mt-1.5 px-1">Total = note de composition + performance (maximum {PERF_MAX}).</p>
     </div>
   );
 
@@ -1731,7 +1908,7 @@ Si une information est illisible ou absente, mets une chaîne vide "" pour ce ch
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5">
               {[
                 { icon: Mic, title: 'Saisie Vocale IA', desc: "Dictez vos notes à voix haute, sans jamais toucher le clavier.", bg: 'bg-indigo-500/10', text: 'text-indigo-400' },
-                { icon: Camera, title: 'Scanner Intelligent', desc: "Photographiez jusqu'à 5 pages de registre : l'IA remplit toutes les matières automatiquement.", bg: 'bg-purple-500/10', text: 'text-purple-400' },
+                { icon: Camera, title: 'Scanner Intelligent', desc: "Photographiez jusqu'à 5 pages de registre : l'IA rattache chaque note à son élève grâce au numéro d'ordre.", bg: 'bg-purple-500/10', text: 'text-purple-400' },
                 { icon: Upload, title: 'Import EducMaster', desc: "Importez votre liste d'élèves (CSV, Excel) en un clic, sans ressaisie.", bg: 'bg-violet-500/10', text: 'text-violet-400' },
                 { icon: Download, title: 'Export 100% Compatible', desc: "Générez le fichier exact accepté par le portail officiel EducMaster.", bg: 'bg-emerald-500/10', text: 'text-emerald-400' }
               ].map((feat, i) => (
@@ -1824,6 +2001,7 @@ Si une information est illisible ou absente, mets une chaîne vide "" pour ce ch
   // ==========================================================
   const drawerItemClass = "w-full flex items-center gap-3 px-3 py-3 rounded-xl text-sm font-semibold text-slate-200 hover:bg-slate-900 transition-colors text-left";
   const navCount = (id) => (id === 'eleves' ? (activeClass?.eleves.length || 0) : id === 'enrolement' ? enrolements.length : null);
+  const listPreview = (arr, max = 8) => `${arr.slice(0, max).join(' ; ')}${arr.length > max ? ` (+${arr.length - max})` : ''}`;
 
   return (
     <div className="min-h-screen bg-slate-900 text-slate-100 flex flex-col font-sans selection:bg-indigo-500 selection:text-white">
@@ -2187,7 +2365,7 @@ Si une information est illisible ou absente, mets une chaîne vide "" pour ce ch
                 <div className="flex flex-col sm:flex-row gap-3">
                   <button onClick={() => goToTab('scan')} className="bg-slate-800 hover:bg-slate-700 text-white font-bold text-sm px-5 py-3 rounded-xl flex items-center justify-center gap-2 transition-all">
                     <Camera className="w-4 h-4" />
-                    Scanner une feuille
+                    Scanner un registre
                   </button>
                   <div className="flex flex-col items-center gap-1">
                     <button onClick={exportToEducMaster} className="w-full bg-gradient-to-r from-emerald-500 to-teal-500 text-slate-950 font-black text-sm px-5 py-3 rounded-xl flex items-center justify-center gap-2 transition-all shadow-lg shadow-emerald-500/10">
@@ -2486,7 +2664,7 @@ Si une information est illisible ou absente, mets une chaîne vide "" pour ce ch
           </div>
         )}
 
-        {/* ---------------- SCANNER IA ---------------- */}
+        {/* ---------------- SCANNER IA (REGISTRE) ---------------- */}
         {activeTab === 'scan' && (
           <div className="max-w-2xl mx-auto w-full space-y-5">
             <div className="flex items-center justify-between">
@@ -2501,9 +2679,9 @@ Si une information est illisible ou absente, mets une chaîne vide "" pour ce ch
                 <div className="inline-flex bg-indigo-500/10 text-indigo-400 border border-indigo-500/20 p-3 rounded-2xl mb-1">
                   <Sparkles className="w-6 h-6" />
                 </div>
-                <h3 className="text-xl font-black text-white">Scanner IA de registres de notes</h3>
+                <h3 className="text-xl font-black text-white">Scanner IA de registre de notes</h3>
                 <p className="text-xs text-slate-400 max-w-md mx-auto">
-                  Importez jusqu'à {MAX_SCAN_FILES} images : elles sont analysées en même temps et les notes sont distribuées automatiquement.
+                  Photographiez la <strong className="text-slate-300">page de garde</strong> (numéros et noms) puis les <strong className="text-slate-300">pages de notes</strong> (numéros et notes) : jusqu'à {MAX_SCAN_FILES} images, analysées en même temps. Chaque note est rattachée à son élève par le numéro d'ordre.
                 </p>
               </div>
 
@@ -2559,11 +2737,25 @@ Si une information est illisible ou absente, mets une chaîne vide "" pour ce ch
 
               {scanMode === 'all' && (
                 <p className="text-[11px] text-slate-400 bg-indigo-950/20 border border-indigo-500/10 rounded-xl px-3 py-2">
-                  Les matières présentes sur l'image sont détectées automatiquement ; chaque note est placée dans la bonne colonne pour tous les élèves.
+                  Les matières présentes sur chaque page sont détectées automatiquement d'après les en-têtes de colonnes ; chaque note est placée dans la bonne matière pour l'élève correspondant.
                 </p>
               )}
 
               {scanStatus !== 'review' && renderVentilationSelect()}
+
+              {scanStatus !== 'review' && (
+                <label className="flex items-start gap-2 text-[11px] text-slate-400 bg-slate-900/60 border border-slate-800 rounded-xl px-3 py-2 cursor-pointer">
+                  <input
+                    type="checkbox" checked={scanUseRosterOrder}
+                    onChange={(e) => setScanUseRosterOrder(e.target.checked)}
+                    disabled={scanStatus === 'analyzing'}
+                    className="mt-0.5 w-4 h-4 accent-indigo-500 shrink-0"
+                  />
+                  <span>
+                    Pas de page de garde ? Mes numéros suivent l'ordre de la liste de ma classe (n°1 = 1er élève). À cocher seulement si l'ordre est identique.
+                  </span>
+                </label>
+              )}
 
               <input ref={cameraInputRef} type="file" accept="image/*" capture="environment" onChange={handleScanFilesSelected} className="hidden" />
               <input ref={galleryInputRef} type="file" accept="image/*" multiple onChange={handleScanFilesSelected} className="hidden" />
@@ -2586,9 +2778,9 @@ Si une information est illisible ou absente, mets une chaîne vide "" pour ce ch
                   {scanFiles.length > 0 && (
                     <div className="space-y-3">
                       <div className="flex items-center justify-between text-[11px] text-slate-400">
-                        <span>{scanFiles.length}/{MAX_SCAN_FILES} image(s)</span>
+                        <span>{scanFiles.length}/{MAX_SCAN_FILES} image(s) — indiquez le rôle de chaque page si l'auto-détection se trompe</span>
                         {scanStatus !== 'analyzing' && (
-                          <button onClick={resetScan} className="flex items-center gap-1 text-slate-400 hover:text-white">
+                          <button onClick={resetScan} className="flex items-center gap-1 text-slate-400 hover:text-white shrink-0 ml-2">
                             <RotateCcw className="w-3.5 h-3.5" />
                             Tout effacer
                           </button>
@@ -2613,7 +2805,8 @@ Si une information est illisible ou absente, mets une chaîne vide "" pour ce ch
                               </button>
                             )}
                             <div className={`px-2 py-1.5 text-[10px] font-semibold flex items-center gap-1.5 ${
-                              f.status === 'done' ? 'bg-emerald-950/70 text-emerald-300'
+                              f.status === 'done' && f.empty ? 'bg-amber-950/70 text-amber-300'
+                                : f.status === 'done' ? 'bg-emerald-950/70 text-emerald-300'
                                 : f.status === 'error' ? 'bg-rose-950/70 text-rose-300'
                                 : f.status === 'processing' ? 'bg-indigo-950/70 text-indigo-300'
                                 : 'bg-slate-900 text-slate-400'
@@ -2622,6 +2815,16 @@ Si une information est illisible ou absente, mets une chaîne vide "" pour ce ch
                               <span className="truncate">
                                 {f.status === 'pending' ? 'En attente' : f.status === 'processing' ? 'Analyse…' : (f.message || (f.status === 'done' ? 'Terminé' : 'Erreur'))}
                               </span>
+                            </div>
+                            <div className="px-2 pb-2 pt-1 bg-slate-950">
+                              <select
+                                value={f.role}
+                                onChange={(e) => setScanFileRole(f.id, e.target.value)}
+                                disabled={scanStatus === 'analyzing' || !f.base64}
+                                className="w-full bg-slate-900 border border-slate-800 text-slate-300 text-[10px] font-semibold rounded-lg px-1.5 py-1 focus:outline-none focus:border-indigo-500 disabled:opacity-50"
+                              >
+                                {SCAN_ROLES.map(r => (<option key={r.id} value={r.id}>{r.label}</option>))}
+                              </select>
                             </div>
                           </div>
                         ))}
@@ -2665,17 +2868,48 @@ Si une information est illisible ou absente, mets une chaîne vide "" pour ce ch
               {/* RÉVISION DES RÉSULTATS */}
               {scanStatus === 'review' && (
                 <div className="space-y-4">
-                  <div className="bg-indigo-950/20 border border-indigo-500/10 rounded-xl p-3 text-xs text-slate-300 space-y-1">
-                    <p><strong className="text-white">{scanDetectedCount}</strong> note(s) détectée(s). Vérifiez avant d'enregistrer ; décochez ou corrigez si besoin.</p>
+                  <div className="bg-indigo-950/20 border border-indigo-500/10 rounded-xl p-3 text-xs text-slate-300 space-y-1.5">
+                    <p><strong className="text-white">{scanDetectedCount}</strong> note(s) rattachée(s) aux élèves. Vérifiez avant d'enregistrer ; décochez ou corrigez si besoin.</p>
+
+                    {scanReport && scanReport.refRead > 0 && (
+                      <p className="text-slate-400">
+                        Page de garde : {scanReport.refRead} numéro(s) lu(s), {scanReport.refMatched} rapproché(s) de votre liste de classe.
+                      </p>
+                    )}
+                    {scanReport?.usedRosterOrder && (
+                      <p className="text-amber-300">
+                        Sans page de garde : les numéros ont été associés à l'ordre de votre liste de classe (n°1 = 1er élève). Contrôlez les noms ci-dessous.
+                      </p>
+                    )}
+                    {scanReport?.missingReferentiel && (
+                      <p className="text-amber-300">
+                        Aucune page de garde (noms) détectée : les notes n'ont pas pu être rattachées. Ajoutez la page des noms, ou cochez « mes numéros suivent l'ordre de la classe », puis relancez.
+                      </p>
+                    )}
+                    {scanReport && scanReport.refUnmatched.length > 0 && (
+                      <p className="text-amber-300">
+                        Noms du registre introuvables (ou ambigus) dans votre liste de classe : {listPreview(scanReport.refUnmatched)}.
+                      </p>
+                    )}
+                    {scanReport && scanReport.unmatchedNumbers.length > 0 && (
+                      <p className="text-amber-300">
+                        Notes non rattachées (numéros sans élève) : {listPreview(scanReport.unmatchedNumbers.map(String), 15)}.
+                      </p>
+                    )}
+                    {scanReport && scanReport.unknownColumns.length > 0 && (
+                      <p className="text-amber-300">
+                        Colonnes non reconnues (ignorées) : {listPreview(scanReport.unknownColumns)}.
+                      </p>
+                    )}
                     <p className="text-slate-400 flex items-center gap-1.5">
                       <Wand2 className="w-3.5 h-3.5 text-amber-400 shrink-0" />
-                      Les notes marquées ont été ventilées automatiquement depuis la note totale (note + perfectionnement ≤ {PERF_MAX}).
+                      Les notes marquées ont été ventilées automatiquement depuis la note totale (composition + performance ≤ {PERF_MAX}).
                     </p>
                   </div>
 
                   {scanVisibleMatieres.length === 0 ? (
                     <div className="text-center py-8 border border-dashed border-slate-800 rounded-xl text-xs text-slate-400">
-                      Aucune matière n'a pu être lue sur ces images. Essayez des photos plus nettes ou saisissez les notes manuellement.
+                      Aucune note n'a pu être rattachée à un élève. Vérifiez les messages ci-dessus, la netteté des photos et le rôle de chaque page.
                     </div>
                   ) : (
                     <>
@@ -2754,11 +2988,18 @@ Si une information est illisible ou absente, mets une chaîne vide "" pour ce ch
                     </>
                   )}
 
-                  <div className="flex gap-3">
-                    <button onClick={resetScan} className="flex-1 bg-slate-900 hover:bg-slate-800 border border-slate-800 text-slate-300 text-sm font-semibold py-3 rounded-xl transition-colors">Annuler</button>
-                    <button onClick={handleApplyScanResults} className="flex-[2] bg-gradient-to-r from-emerald-500 to-teal-500 text-slate-950 font-black text-sm py-3 px-4 rounded-xl shadow-lg shadow-emerald-500/10 hover:opacity-95 transition-all">
+                  <div className="space-y-2">
+                    <button onClick={handleApplyScanResults} className="w-full bg-gradient-to-r from-emerald-500 to-teal-500 text-slate-950 font-black text-sm py-3 px-4 rounded-xl shadow-lg shadow-emerald-500/10 hover:opacity-95 transition-all">
                       Enregistrer les notes cochées
                     </button>
+                    <div className="grid grid-cols-2 gap-2">
+                      <button onClick={backToScanFiles} className="bg-slate-900 hover:bg-slate-800 border border-slate-800 text-slate-300 text-xs font-semibold py-2.5 rounded-xl transition-colors">
+                        Modifier les images
+                      </button>
+                      <button onClick={resetScan} className="bg-slate-900 hover:bg-slate-800 border border-slate-800 text-slate-300 text-xs font-semibold py-2.5 rounded-xl transition-colors">
+                        Annuler
+                      </button>
+                    </div>
                   </div>
                 </div>
               )}
