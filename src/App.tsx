@@ -4,40 +4,35 @@ import {
   BookOpen, Users, Plus, Download, Mic, MicOff, CheckCircle, CreditCard,
   TrendingUp, Award, AlertTriangle, FileSpreadsheet, Trash2, ChevronRight,
   ArrowLeft, Settings, Lock, Check, Camera, Sparkles, Image as ImageIcon,
-  RotateCcw, Upload, Library, GraduationCap, Bot, Send
+  RotateCcw, Upload, Library, GraduationCap, Bot, Send,
+  Menu, X, MoreVertical, ChevronDown, Layers, Wand2
 } from 'lucide-react';
 
-// --- CONFIGURATION ET COMPOSANTS PRINCIPAUX ---
+// ==========================================================
+// CONFIGURATION
+// ==========================================================
 
+// --- MATIÈRES : l'ORDRE de ce tableau est l'ordre EXACT des colonnes du modèle officiel
+// EducMaster. Il sert de source unique pour l'affichage, la saisie, le scanner et l'export.
+// "exportLabel" = libellé exact du modèle EducMaster (coquilles comprises).
 const MATIERES_PRIMAIRE = [
-  { id: 'dictee', label: 'Dictée', short: 'Dictée' },
-  { id: 'maths', label: 'Mathématiques', short: 'Math' },
-  { id: 'expression_ecrite', label: 'Expression écrite', short: 'Exp. Écrite' },
-  { id: 'comprehension', label: "Compréhension de l'écrit", short: 'Compréh.' },
-  { id: 'est', label: 'EST (Edu. Scien. & Tech.)', short: 'EST' },
-  { id: 'es', label: 'ES (Edu. Sociale)', short: 'ES' },
-  { id: 'ea_oral', label: 'EA (Oral)', short: 'EA Oral' },
-  { id: 'ea_dessin', label: 'EA (Dessin/Couture)', short: 'EA Dessin' },
-  { id: 'eps', label: 'EPS (Edu. Phys. & Sportive)', short: 'EPS' }
+  { id: 'dictee', label: 'Dictée', short: 'Dictée', exportLabel: 'Dictée' },
+  { id: 'maths', label: 'Mathématiques', short: 'Math', exportLabel: 'Math' },
+  { id: 'expression_ecrite', label: 'Expression écrite', short: 'Exp. Écrite', exportLabel: 'Expresion écrite' },
+  { id: 'comprehension', label: "Compréhension de l'écrit", short: 'Compréh.', exportLabel: "Compréhension de l'écrit" },
+  { id: 'est', label: 'EST (Edu. Scien. & Tech.)', short: 'EST', exportLabel: 'EST' },
+  { id: 'es', label: 'ES (Edu. Sociale)', short: 'ES', exportLabel: 'ES' },
+  { id: 'ea_oral', label: 'EA (Oral)', short: 'EA Oral', exportLabel: 'EA (Oral)' },
+  { id: 'ea_dessin', label: 'EA (Dessin/Couture)', short: 'EA Dessin', exportLabel: 'EA (Déssin/Couture)' },
+  { id: 'eps', label: 'EPS (Edu. Phys. & Sportive)', short: 'EPS', exportLabel: 'EPS' }
 ];
 
-// Noms de colonnes EXACTS attendus par le modèle officiel EducMaster
-// (confirmé sur un vrai fichier EducMaster fourni par l'enseignant)
-const EDUCMASTER_COLUMN_NAMES = {
-  dictee: 'Dictée',
-  maths: 'Math',
-  expression_ecrite: 'Expresion écrite',
-  comprehension: "Compréhension de l'écrit",
-  est: 'EST',
-  es: 'ES',
-  ea_oral: 'EA (Oral)',
-  ea_dessin: 'EA (Déssin/Couture)',
-  eps: 'EPS'
-};
+// Sous-en-têtes du modèle EducMaster le plus récent (08/2026). Si EducMaster exige
+// "Note perfectionnement", changez uniquement cette ligne.
+const EDUCMASTER_SUBHEADERS = { note: 'Note obtenue', perf: 'Note perf.' };
 
 const CLASSES_PRIMAIRE = ['CI', 'CP', 'CE1', 'CE2', 'CM1', 'CM2'];
 
-// --- TYPES D'ÉVALUATION (sélection obligatoire avant toute saisie de notes) ---
 const EVALUATIONS = [
   { id: 'sommative1', label: 'Évaluation Sommative 1', short: 'Sommative 1' },
   { id: 'sommative2', label: 'Évaluation Sommative 2', short: 'Sommative 2' },
@@ -45,11 +40,18 @@ const EVALUATIONS = [
   { id: 'formative1', label: 'Évaluation Formative 1', short: 'Formative 1' }
 ];
 
+// --- NOTE TOTALE = note de l'élève + note de performance (perfectionnement) ≤ PERF_MAX ---
+const PERF_MAX = 2;
+
+const VENTILATION_STRATEGIES = [
+  { id: 'proportionnelle', label: 'Proportionnelle (recommandé)' },
+  { id: 'max', label: 'Perf. maximale (2 pts)' },
+  { id: 'zero', label: 'Sans perf. (tout en note)' }
+];
+
+const MAX_SCAN_FILES = 5;
+
 // --- CLASSE D'ESSAI (démo permanente, hors quota des classes créées) ---
-// CM2 Émeraude sert de bac à sable : accessible à toutes les formules (y
-// compris sans abonnement), plafonnée à 5 élèves, avec 100% des
-// fonctionnalités (saisie, scan, export) pour laisser l'enseignant juger
-// du rendu final avant de souscrire.
 const TRIAL_CLASS_ID = 'class-1';
 const TRIAL_CLASS_MAX_ELEVES = 5;
 
@@ -82,18 +84,28 @@ const LICENSE_API_URL = 'https://mastanote-backend-j9hh.onrender.com/api/validat
 const ASSISTANT_API_URL = 'https://mastanote-backend-j9hh.onrender.com/api/assistant';
 const FICHES_PEDAGOGIQUES_URL = 'https://soudoboutik-ebook.mychariow.shop';
 const BOUTIQUE_URL = 'https://xjqdkqwz.mychariow.shop';
+const SECONDAIRE_URL = 'https://mastanote-secondaire-ai.onrender.com';
 
-// --- ASSISTANT IA : suggestions contextuelles par onglet + onglets valides pour le deep-linking ---
+// --- ASSISTANT IA ---
 const VALID_TABS = ['dashboard', 'saisie', 'scan', 'eleves', 'enrolement', 'parametres'];
 
 const ASSISTANT_QUICK_REPLIES = {
-  dashboard: ["Comment saisir mes notes ?", "Comment exporter vers EducMaster ?", "C'est quoi le mode essai ?"],
-  saisie: ["Comment utiliser la saisie vocale ?", "Que veut dire 'Perfectionnement' ?", "Comment changer de type d'évaluation ?"],
-  scan: ["Comment scanner une feuille de notes ?", "Pourquoi mes notes ne sont pas détectées ?", "Le scanner ne répond pas, que faire ?"],
-  eleves: ["Comment importer ma liste EducMaster ?", "Comment ajouter un élève manuellement ?", "Quel format de fichier est accepté ?"],
+  dashboard: ["Comment saisir mes notes ?", "Pourquoi EducMaster refuse mon fichier ?", "C'est quoi le mode essai ?"],
+  saisie: ["Comment utiliser la saisie vocale ?", "Comment saisir la note totale ?", "Que veut dire 'Perfectionnement' ?"],
+  scan: ["Comment scanner plusieurs images ?", "Comment fonctionne « Toutes les matières » ?", "Pourquoi mes notes sont-elles ventilées ?"],
+  eleves: ["Comment importer ma liste EducMaster ?", "Qu'est-ce que le modèle EducMaster ?", "Un élève manque dans mon modèle, que faire ?"],
   enrolement: ["Comment enrôler un nouvel élève ?", "Le matricule est-il obligatoire ?", "Comment scanner une fiche d'enrôlement ?"],
   parametres: ["Comment activer ma licence ?", "Comment verrouiller mon établissement ?", "Quelles sont les formules d'abonnement ?"]
 };
+
+// --- NAVIGATION (barre du bas sur mobile / onglets sur ordinateur) ---
+const NAV_ITEMS = [
+  { id: 'dashboard', label: 'Tableau de bord', short: 'Tableau', icon: TrendingUp },
+  { id: 'saisie', label: 'Saisie Express', short: 'Saisie', icon: Mic },
+  { id: 'scan', label: 'Scanner IA', short: 'Scanner', icon: Camera },
+  { id: 'eleves', label: 'Liste des Élèves', short: 'Élèves', icon: Users },
+  { id: 'enrolement', label: 'Enrôler Vos Élèves', short: 'Enrôler', icon: Plus }
+];
 
 const ELEVES_INITIAL_CM2 = [
   { id: '1', matricule: '24-CM2-001', nom: 'ABALO', prenoms: 'Sena Jean' },
@@ -106,9 +118,22 @@ const ELEVES_INITIAL_CM2 = [
   { id: '8', matricule: '24-CM2-008', nom: 'ADANZAN', prenoms: 'Sèmèvo Pierre' }
 ];
 
-// Nettoie une chaîne pour un usage dans un nom de fichier (sans accents,
-// sans espaces ni ponctuation) — mime le motif observé sur les fichiers
-// officiels EducMaster (ex: "epptchankadacm2").
+const STORAGE_KEY = 'mastanote-ai-state-v2';
+
+// ==========================================================
+// UTILITAIRES (hors composant)
+// ==========================================================
+
+const loadPersistedState = () => {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY);
+    return raw ? JSON.parse(raw) : null;
+  } catch (err) {
+    console.error("Impossible de lire les données sauvegardées :", err);
+    return null;
+  }
+};
+
 const slugifyForFilename = (str) =>
   (str || '')
     .toString()
@@ -116,24 +141,199 @@ const slugifyForFilename = (str) =>
     .replace(/[^a-zA-Z0-9]+/g, '')
     .toLowerCase();
 
-export default function App() {
-  // --- ÉTAT LANDING PAGE ---
-  const [hasEnteredApp, setHasEnteredApp] = useState(false);
+const normalizeName = (s) =>
+  (s || '').toString().toLowerCase()
+    .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+    .replace(/[^a-z0-9]+/g, ' ').trim();
 
-  // --- ÉTATS ---
-  const STORAGE_KEY = 'mastanote-ai-state-v2';
+const clamp = (v, min, max) => Math.min(max, Math.max(min, v));
+const round2 = (v) => Math.round(v * 100) / 100;
 
-  const loadPersistedState = () => {
-    try {
-      const raw = localStorage.getItem(STORAGE_KEY);
-      return raw ? JSON.parse(raw) : null;
-    } catch (err) {
-      console.error("Impossible de lire les données sauvegardées :", err);
-      return null;
+const toNum = (v) => {
+  if (v === null || v === undefined || v === '') return null;
+  const n = parseFloat(String(v).replace(',', '.'));
+  return Number.isFinite(n) ? n : null;
+};
+
+// Ventile une note TOTALE (note + perfectionnement) en { note, perf } avec perf ≤ PERF_MAX.
+// La somme note + perf est toujours égale au total saisi.
+const ventilateTotal = (total, strategy = 'proportionnelle') => {
+  const t = clamp(round2(total), 0, 20);
+  let perf;
+  if (strategy === 'max') perf = Math.min(PERF_MAX, t);
+  else if (strategy === 'zero') perf = 0;
+  else perf = Math.round(((t / 20) * PERF_MAX) * 4) / 4; // proportionnelle, au quart de point
+  perf = Math.min(perf, PERF_MAX, t);
+  return { note: round2(t - perf), perf };
+};
+
+// Extrait un tableau d'une réponse JSON potentiellement enveloppée dans un objet.
+const extractArray = (o) => {
+  if (Array.isArray(o)) return o;
+  if (o && typeof o === 'object') {
+    const found = Object.values(o).find(v => Array.isArray(v));
+    if (found) return found;
+  }
+  throw new Error("Réponse de l'IA illisible.");
+};
+
+// Parse un tableau JSON, même tronqué : récupère tous les objets complets.
+const parseJsonArrayLenient = (rawText) => {
+  const clean = (rawText || '').replace(/```json|```/gi, '').trim();
+  const start = clean.indexOf('[');
+  if (start === -1) {
+    try { return extractArray(JSON.parse(clean)); } catch (e) { throw new Error("Réponse de l'IA illisible."); }
+  }
+  const body = clean.slice(start);
+  try { return extractArray(JSON.parse(body)); } catch (e) { /* tronquée ou texte parasite */ }
+
+  let depth = 0, inStr = false, esc = false, lastComplete = -1;
+  for (let i = 0; i < body.length; i++) {
+    const c = body[i];
+    if (inStr) {
+      if (esc) esc = false;
+      else if (c === '\\') esc = true;
+      else if (c === '"') inStr = false;
+      continue;
     }
-  };
+    if (c === '"') inStr = true;
+    else if (c === '[' || c === '{') depth++;
+    else if (c === ']' || c === '}') {
+      depth--;
+      if (depth === 1 && c === '}') lastComplete = i;
+    }
+  }
+  if (lastComplete === -1) throw new Error("Réponse de l'IA illisible.");
+  return JSON.parse(body.slice(0, lastComplete + 1) + ']');
+};
 
-  const persisted = loadPersistedState();
+// Redimensionne + compresse une image (JPEG) pour accélérer l'envoi et l'analyse.
+const fileToCompressedImage = (file, maxSide = 1800, quality = 0.85) =>
+  new Promise((resolve, reject) => {
+    const url = URL.createObjectURL(file);
+    const img = new Image();
+    img.onload = () => {
+      try {
+        const scale = Math.min(1, maxSide / Math.max(img.width, img.height));
+        const w = Math.max(1, Math.round(img.width * scale));
+        const h = Math.max(1, Math.round(img.height * scale));
+        const canvas = document.createElement('canvas');
+        canvas.width = w;
+        canvas.height = h;
+        const ctx = canvas.getContext('2d');
+        ctx.fillStyle = '#ffffff';
+        ctx.fillRect(0, 0, w, h);
+        ctx.drawImage(img, 0, 0, w, h);
+        const dataUrl = canvas.toDataURL('image/jpeg', quality);
+        URL.revokeObjectURL(url);
+        resolve({ base64: dataUrl.split(',')[1], mediaType: 'image/jpeg', previewUrl: dataUrl });
+      } catch (e) {
+        URL.revokeObjectURL(url);
+        reject(e);
+      }
+    };
+    img.onerror = () => {
+      URL.revokeObjectURL(url);
+      reject(new Error("Format d'image non supporté (essayez JPG ou PNG)."));
+    };
+    img.src = url;
+  });
+
+// Appel du backend avec nouvelles tentatives automatiques (surcharge 503, réseau, timeout).
+const callScanApi = async (file, promptText) => {
+  const MAX_ATTEMPTS = 3;
+  let lastErr = new Error('Échec');
+  for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 90000);
+    try {
+      const response = await fetch(SCAN_API_URL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ imageBase64: file.base64, mediaType: file.mediaType, promptText }),
+        signal: controller.signal
+      });
+      if (!response.ok) {
+        const errData = await response.json().catch(() => ({}));
+        const err = new Error(errData.error || `Erreur serveur : ${response.status}`);
+        err.retryable = response.status >= 500;
+        throw err;
+      }
+      const data = await response.json();
+      return typeof data.content === 'string' ? data.content : '';
+    } catch (err) {
+      lastErr = err;
+      const retryable = err.name === 'AbortError' || err.retryable || err instanceof TypeError;
+      if (!retryable || attempt === MAX_ATTEMPTS) break;
+      await new Promise(r => setTimeout(r, 2000 * attempt));
+    } finally {
+      clearTimeout(timer);
+    }
+  }
+  if (lastErr.name === 'AbortError') throw new Error("Délai dépassé : le serveur n'a pas répondu.");
+  throw lastErr;
+};
+
+const buildScanPrompt = ({ mode, targetMatieres, roster, evaluationLabel }) => {
+  const listeMatieres = targetMatieres.map(m => `- "${m.id}" = ${m.exportLabel}`).join('\n');
+  const consigneMatieres = mode === 'all'
+    ? `Détecte AUTOMATIQUEMENT les matières présentes sur l'image (colonnes ou rubriques du registre) et ne renvoie que celles que tu vois. Les intitulés du registre peuvent différer légèrement (abréviations, ordre différent) : associe chacun à l'identifiant le plus proche de la liste.`
+    : `Ne renvoie QUE la matière "${targetMatieres[0].id}" (${targetMatieres[0].exportLabel}).`;
+
+  return `Tu analyses la photo d'un registre ou d'une feuille de notes (manuscrit ou imprimé) d'une classe de primaire au Bénin, pour l'"${evaluationLabel}".
+
+Liste des élèves de la classe, au format "matricule | Nom Prénoms" :
+${roster}
+
+Matières possibles (identifiant = libellé) :
+${listeMatieres}
+
+${consigneMatieres}
+
+Pour chaque élève reconnu avec certitude (par son nom, associé au matricule de la liste), relève pour chaque matière :
+- "note" : la note obtenue par l'élève,
+- "perf" : la note de perfectionnement (au maximum ${PERF_MAX}),
+- "total" : la note globale (note + perfectionnement).
+Ne remplis que ce qui est réellement écrit. Si UNE SEULE valeur est écrite pour une matière, mets-la dans "total". N'invente rien : omets les champs absents ou illisibles.
+
+Réponds UNIQUEMENT avec un tableau JSON compact, sur une seule ligne, sans markdown, au format :
+[{"matricule":"24-CM2-001","nom":"ABALO Sena Jean","notes":{"dictee":{"total":15},"maths":{"note":13,"perf":2}}}]
+Ignore les élèves absents de la liste. Si rien n'est lisible, réponds [].`;
+};
+
+// ==========================================================
+// COMPOSANT PRINCIPAL
+// ==========================================================
+// --- ASSISTANT : liens cliquables, uniquement vers des domaines de confiance ---
+const SAFE_LINK_HOSTS = [
+  'educmaster.bj',
+  'ticmaster.com',
+  'mychariow.shop',
+  'mastanote-ai.onrender.com',
+  'mastanote-secondaire-ai.onrender.com'
+];
+
+const isSafeLink = (url) => {
+  try {
+    const host = new URL(url).hostname;
+    return SAFE_LINK_HOSTS.some(d => host === d || host.endsWith('.' + d));
+  } catch (e) {
+    return false;
+  }
+};
+
+const renderTextWithLinks = (text) => {
+  const parts = text.split(/(https?:\/\/[^\s)]*[^\s).,;:!?])/g);
+  return parts.map((part, i) =>
+    /^https?:\/\//.test(part) && isSafeLink(part)
+      ? <a key={i} href={part} target="_blank" rel="noopener noreferrer" className="underline text-indigo-300 break-all">{part}</a>
+      : <React.Fragment key={i}>{part}</React.Fragment>
+  );
+};
+
+export default function App() {
+  const [hasEnteredApp, setHasEnteredApp] = useState(false);
+  const [persisted] = useState(() => loadPersistedState());
 
   const [user, setUser] = useState(persisted?.user || {
     nom: 'Enseignant Bénin',
@@ -156,26 +356,41 @@ export default function App() {
     'class-1': {
       'sommative1': {
         'maths': {
-          '1': { note: 14, perf: 15 }, '2': { note: 8.5, perf: 10 }, '3': { note: 16, perf: 16 },
-          '4': { note: 10, perf: 12 }, '5': { note: 18, perf: 18 }
+          '1': { note: 13, perf: 1.5 }, '2': { note: 7.5, perf: 1 }, '3': { note: 14, perf: 2 },
+          '4': { note: 9, perf: 1 }, '5': { note: 16, perf: 2 }
         },
         'dictee': {
-          '1': { note: 12, perf: 14 }, '2': { note: 9, perf: 11 }, '3': { note: 15, perf: 15 }
+          '1': { note: 11, perf: 1.5 }, '2': { note: 8, perf: 1 }, '3': { note: 13.5, perf: 1.5 }
         }
       }
     }
   });
 
+  const [ventilationStrategy, setVentilationStrategy] = useState(persisted?.ventilationStrategy || 'proportionnelle');
+
   useEffect(() => {
     const timer = setTimeout(() => {
       try {
-        localStorage.setItem(STORAGE_KEY, JSON.stringify({ user, classes, notes }));
+        localStorage.setItem(STORAGE_KEY, JSON.stringify({ user, classes, notes, ventilationStrategy }));
       } catch (err) {
         console.error("Impossible de sauvegarder les données :", err);
       }
     }, 300);
     return () => clearTimeout(timer);
-  }, [user, classes, notes]);
+  }, [user, classes, notes, ventilationStrategy]);
+
+  // --- STABILISATION MOBILE : bloque le pinch-to-zoom iOS (gesturestart) ---
+  useEffect(() => {
+    const prevent = (e) => e.preventDefault();
+    document.addEventListener('gesturestart', prevent);
+    document.addEventListener('gesturechange', prevent);
+    document.addEventListener('gestureend', prevent);
+    return () => {
+      document.removeEventListener('gesturestart', prevent);
+      document.removeEventListener('gesturechange', prevent);
+      document.removeEventListener('gestureend', prevent);
+    };
+  }, []);
 
   const [selectedClassId, setSelectedClassId] = useState('class-1');
   const [activeTab, setActiveTab] = useState('dashboard');
@@ -185,6 +400,7 @@ export default function App() {
   const [currentSaisieIndex, setCurrentSaisieIndex] = useState(0);
   const [tempNote, setTempNote] = useState('');
   const [tempPerf, setTempPerf] = useState('');
+  const [saisieTotalMode, setSaisieTotalMode] = useState(false);
 
   const [newClassName, setNewClassName] = useState('');
   const [newClassNiveau, setNewClassNiveau] = useState('CM2');
@@ -204,21 +420,30 @@ export default function App() {
   const [notif, setNotif] = useState(null);
   const [updateInfo, setUpdateInfo] = useState(null);
 
-  // --- ASSISTANT IA (chatbot de guidage contextuel) ---
+  // --- INTERFACE : menus, tiroirs, sections repliables ---
+  const [menuOpen, setMenuOpen] = useState(false);
+  const [classMenuOpen, setClassMenuOpen] = useState(false);
+  const [showDiag, setShowDiag] = useState(false);
+  const [enrolScanOpen, setEnrolScanOpen] = useState(false);
+
+  // --- ASSISTANT IA ---
   const [assistantOpen, setAssistantOpen] = useState(false);
   const [assistantMessages, setAssistantMessages] = useState([]);
   const [assistantInput, setAssistantInput] = useState('');
   const [assistantLoading, setAssistantLoading] = useState(false);
 
+  // --- SCANNER IA (multi-images + mode toutes matières) ---
+  const [scanMode, setScanMode] = useState('single'); // 'single' | 'all'
   const [scanMatiere, setScanMatiere] = useState('maths');
   const [scanEvaluation, setScanEvaluation] = useState('sommative1');
-  const [scanImage, setScanImage] = useState(null);
-  const [scanStatus, setScanStatus] = useState('idle');
+  const [scanFiles, setScanFiles] = useState([]);
+  const [scanStatus, setScanStatus] = useState('idle'); // idle | analyzing | review | error
   const [scanResults, setScanResults] = useState([]);
+  const [scanReviewMatiere, setScanReviewMatiere] = useState(null);
   const [scanErrorMsg, setScanErrorMsg] = useState('');
   const [scanProgressMsg, setScanProgressMsg] = useState('');
 
-  // --- ÉTATS POUR L'ENRÔLEMENT DE NOUVEAUX ÉLÈVES ---
+  // --- ENRÔLEMENT ---
   const [enrolements, setEnrolements] = useState([]);
   const [enrolNom, setEnrolNom] = useState('');
   const [enrolPrenoms, setEnrolPrenoms] = useState('');
@@ -246,8 +471,6 @@ export default function App() {
   const assistantScrollRef = useRef(null);
 
   const isPremiumPlan = user.statut_abonnement === 'actif' && user.planId === '5ans';
-
-  // --- ÉTATS DÉRIVÉS DU MODE ESSAI (enseignant non abonné) ---
   const isTrial = user.statut_abonnement === 'demo';
   const canExport = !isTrial || !user.exportUsed;
 
@@ -260,69 +483,6 @@ export default function App() {
     setNotif({ message, type });
     setTimeout(() => setNotif(null), 4000);
   };
-
-  // --- ASSISTANT IA : extraction du marqueur de deep-linking [ACTION:tab=xxx] ---
-  const parseAssistantContent = (content) => {
-    const match = content.match(/\[ACTION:tab=([a-z]+)\]/i);
-    if (match && VALID_TABS.includes(match[1].toLowerCase())) {
-      return { text: content.replace(match[0], '').trim(), actionTab: match[1].toLowerCase() };
-    }
-    return { text: content, actionTab: null };
-  };
-
-  const handleSendAssistantMessage = async (textOverride) => {
-    const text = (textOverride ?? assistantInput).trim();
-    if (!text || assistantLoading) return;
-
-    const userMsg = { role: 'user', content: text };
-    const updatedHistory = [...assistantMessages, userMsg];
-    setAssistantMessages(updatedHistory);
-    setAssistantInput('');
-    setAssistantLoading(true);
-
-    try {
-      const response = await fetch(ASSISTANT_API_URL, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          messages: updatedHistory,
-          context: {
-            activeTab,
-            statutAbonnement: user.statut_abonnement,
-            planLabel: user.plan,
-            niveau: activeClass?.niveau,
-            isTrial
-          }
-        })
-      });
-
-      if (!response.ok) {
-        const errData = await response.json().catch(() => ({}));
-        throw new Error(errData.error || `Erreur serveur : ${response.status}`);
-      }
-
-      const data = await response.json();
-      const replyText = typeof data.content === 'string' && data.content.trim()
-        ? data.content
-        : "Désolé, je n'ai pas pu générer de réponse. Réessayez.";
-
-      setAssistantMessages(prev => [...prev, { role: 'assistant', content: replyText }]);
-    } catch (err) {
-      console.error(err);
-      setAssistantMessages(prev => [...prev, {
-        role: 'assistant',
-        content: `Erreur : ${err?.message || "une erreur inconnue est survenue"}. Vérifiez votre connexion et réessayez dans quelques instants.`
-      }]);
-    } finally {
-      setAssistantLoading(false);
-    }
-  };
-
-  useEffect(() => {
-    if (assistantScrollRef.current) {
-      assistantScrollRef.current.scrollTop = assistantScrollRef.current.scrollHeight;
-    }
-  }, [assistantMessages, assistantLoading]);
 
   useEffect(() => {
     const handleUpdateAvailable = (e) => {
@@ -344,7 +504,9 @@ export default function App() {
 
     rec.onstart = () => {
       setIsListening(true);
-      setVoiceStatus("Écoute active... Dites par exemple : 'Quatorze et douze'");
+      setVoiceStatus(saisieTotalMode
+        ? "Écoute active... Dites par exemple : 'Quinze'"
+        : "Écoute active... Dites par exemple : 'Treize et deux'");
     };
     rec.onresult = (event) => {
       const text = event.results[0][0].transcript;
@@ -362,34 +524,37 @@ export default function App() {
       rec.onstart = null; rec.onresult = null; rec.onerror = null; rec.onend = null;
       try { rec.stop(); } catch (e) { /* déjà arrêté */ }
     };
-  }, [selectedClassId, activeMatiere, activeEvaluation, currentSaisieIndex]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedClassId, activeMatiere, activeEvaluation, currentSaisieIndex, saisieTotalMode]);
 
   const processVoiceCommand = (text) => {
     setVoiceStatus(`Reconnu : "${text}"`);
-    const cleanText = text.toLowerCase().trim();
-    const numberPattern = /([0-9]+[.,]?[0-9]*)/g;
-    const matches = cleanText.match(numberPattern);
+    const matches = text.toLowerCase().trim().match(/([0-9]+[.,]?[0-9]*)/g);
+    if (!matches) {
+      setVoiceStatus("Je n'ai pas compris de chiffres. Réessayez.");
+      return;
+    }
+    const first = parseFloat(matches[0].replace(',', '.'));
+    if (!(first >= 0 && first <= 20)) {
+      setVoiceStatus("Désolé, les notes doivent être comprises entre 0 et 20.");
+      return;
+    }
+    setTempNote(first.toString());
 
-    if (matches && matches.length >= 1) {
-      const noteLue = parseFloat(matches[0].replace(',', '.'));
-      if (noteLue >= 0 && noteLue <= 20) {
-        setTempNote(noteLue.toString());
-        if (matches[1]) {
-          const perfLu = parseFloat(matches[1].replace(',', '.'));
-          if (perfLu >= 0 && perfLu <= 20) {
-            setTempPerf(perfLu.toString());
-            triggerNotif(`Notes détectées : Note obtenue ${noteLue}/20, Perf ${perfLu}/20`, 'success');
-          } else {
-            triggerNotif(`Note obtenue détectée : ${noteLue}/20 (perfectionnement non reconnu, non modifié)`, 'success');
-          }
-        } else {
-          triggerNotif(`Note obtenue détectée : ${noteLue}/20`, 'success');
-        }
+    if (saisieTotalMode) {
+      triggerNotif(`Note totale détectée : ${first}/20 (ventilation automatique)`, 'success');
+      return;
+    }
+    if (matches[1]) {
+      const second = parseFloat(matches[1].replace(',', '.'));
+      if (second >= 0 && second <= PERF_MAX) {
+        setTempPerf(second.toString());
+        triggerNotif(`Notes détectées : Note ${first}/20, Perf ${second}/${PERF_MAX}`, 'success');
       } else {
-        setVoiceStatus("Désolé, les notes doivent être comprises entre 0 et 20.");
+        triggerNotif(`Note détectée : ${first}/20 (perfectionnement non reconnu : maximum ${PERF_MAX})`, 'error');
       }
     } else {
-      setVoiceStatus("Je n'ai pas compris de chiffres. Réessayez.");
+      triggerNotif(`Note détectée : ${first}/20`, 'success');
     }
   };
 
@@ -405,27 +570,64 @@ export default function App() {
   const activeClass = classes.find(c => c.id === selectedClassId) || classes[0];
   const activeEleve = activeClass?.eleves[currentSaisieIndex];
 
+  // Navigation avec garde : saisie et scanner nécessitent au moins un élève.
+  const goToTab = (tabId) => {
+    if ((tabId === 'saisie' || tabId === 'scan') && !(activeClass?.eleves.length > 0)) {
+      triggerNotif("Veuillez d'abord ajouter des élèves à votre classe.", 'error');
+      setActiveTab('eleves');
+      setMenuOpen(false);
+      return;
+    }
+    setActiveTab(tabId);
+    setMenuOpen(false);
+  };
+
   useEffect(() => {
     if (activeClass && activeEleve) {
-      const currentNotes = notes[selectedClassId]?.[activeEvaluation]?.[activeMatiere]?.[activeEleve.id] || { note: '', perf: '' };
-      setTempNote(currentNotes.note !== undefined ? currentNotes.note.toString() : '');
-      setTempPerf(currentNotes.perf !== undefined ? currentNotes.perf.toString() : '');
+      const cur = notes[selectedClassId]?.[activeEvaluation]?.[activeMatiere]?.[activeEleve.id] || {};
+      if (saisieTotalMode && cur.note !== undefined) {
+        setTempNote(String(round2(cur.note + (cur.perf ?? 0))));
+      } else {
+        setTempNote(cur.note !== undefined ? cur.note.toString() : '');
+      }
+      setTempPerf(cur.perf !== undefined ? cur.perf.toString() : '');
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [currentSaisieIndex, activeMatiere, activeEvaluation, selectedClassId]);
+  }, [currentSaisieIndex, activeMatiere, activeEvaluation, selectedClassId, saisieTotalMode]);
 
   const handleSaveCurrentAndNext = () => {
     if (!activeClass || !activeEleve) return;
+
+    let finalNote;
+    let finalPerf;
     const n = parseFloat(tempNote);
     const p = parseFloat(tempPerf);
 
-    if (tempNote !== '' && (isNaN(n) || n < 0 || n > 20)) {
-      triggerNotif("La note obtenue doit être comprise entre 0 et 20.", 'error');
-      return;
-    }
-    if (tempPerf !== '' && (isNaN(p) || p < 0 || p > 20)) {
-      triggerNotif("La note de perfectionnement doit être comprise entre 0 et 20.", 'error');
-      return;
+    if (tempNote !== '') {
+      if (isNaN(n) || n < 0 || n > 20) {
+        triggerNotif("La note doit être comprise entre 0 et 20.", 'error');
+        return;
+      }
+      if (saisieTotalMode) {
+        const split = ventilateTotal(n, ventilationStrategy);
+        finalNote = split.note;
+        finalPerf = split.perf;
+      } else {
+        finalNote = n;
+        if (tempPerf !== '') {
+          if (isNaN(p) || p < 0 || p > PERF_MAX) {
+            triggerNotif(`La note de perfectionnement doit être comprise entre 0 et ${PERF_MAX}.`, 'error');
+            return;
+          }
+          finalPerf = p;
+        }
+      }
+    } else if (!saisieTotalMode && tempPerf !== '') {
+      if (isNaN(p) || p < 0 || p > PERF_MAX) {
+        triggerNotif(`La note de perfectionnement doit être comprise entre 0 et ${PERF_MAX}.`, 'error');
+        return;
+      }
+      finalPerf = p;
     }
 
     setNotes(prev => {
@@ -440,10 +642,7 @@ export default function App() {
             ...evalData,
             [activeMatiere]: {
               ...matiereData,
-              [activeEleve.id]: {
-                note: tempNote !== '' ? n : undefined,
-                perf: tempPerf !== '' ? p : undefined
-              }
+              [activeEleve.id]: { note: finalNote, perf: finalPerf }
             }
           }
         }
@@ -461,13 +660,11 @@ export default function App() {
     if (currentSaisieIndex > 0) setCurrentSaisieIndex(prev => prev - 1);
   };
 
-  // --- QUOTA DE CLASSES OFFICIELLES SELON LA FORMULE D'ABONNEMENT ---
-  // La classe d'essai (CM2 Émeraude) est hors-quota : elle ne compte jamais
-  // dans ce total, quelle que soit la formule.
+  // --- QUOTA DE CLASSES OFFICIELLES (la classe d'essai est hors quota) ---
   const getMaxCreatableClasses = () => {
-    if (user.statut_abonnement !== 'actif') return 0; // aucun abonnement : uniquement la classe d'essai
-    if (user.planId === '5ans') return 6; // VIP Premium : 6 classes officielles + la classe d'essai
-    return 2; // Découverte (1 an) et Sérénité (3 ans) : 2 classes officielles + la classe d'essai
+    if (user.statut_abonnement !== 'actif') return 0;
+    if (user.planId === '5ans') return 6;
+    return 2;
   };
 
   const handleCreateClass = (e) => {
@@ -477,7 +674,7 @@ export default function App() {
     const officialClassesCount = classes.filter(c => c.id !== TRIAL_CLASS_ID).length;
     const maxCreatable = getMaxCreatableClasses();
     if (officialClassesCount >= maxCreatable) {
-      const totalDisponible = maxCreatable + 1; // + la classe d'essai CM2 Émeraude
+      const totalDisponible = maxCreatable + 1;
       triggerNotif(`Votre formule actuelle autorise au maximum ${totalDisponible} classe(s) au total (dont la classe d'essai "CM2 Émeraude"). Passez à une formule supérieure pour en créer davantage.`, 'error');
       setShowAddClassModal(false);
       setPaywallModal(true);
@@ -495,6 +692,7 @@ export default function App() {
   };
 
   const handleDeleteClass = () => {
+    setClassMenuOpen(false);
     if (classes.length <= 1) {
       triggerNotif("Vous devez conserver au moins une classe.", 'error');
       return;
@@ -560,6 +758,7 @@ export default function App() {
     triggerNotif("Élève retiré de la classe.");
   };
 
+  // --- IMPORT DE LA LISTE D'ÉLÈVES (canevas EducMaster) ---
   const normalizeHeader = (s) => (s ?? '').toString().toLowerCase()
     .normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim();
 
@@ -611,7 +810,7 @@ export default function App() {
     const students = [];
     rows.slice(1).forEach((row) => {
       if (!row || row.length === 0) return;
-      const matricule = (row[cols.matricule] ?? '').toString().trim();
+      const matricule = (row[cols.matricule] ?? '').toString().replace(/^'/, '').trim();
       const nom = (row[cols.nom] ?? '').toString().trim();
       const prenoms = (row[cols.prenoms] ?? '').toString().trim();
       if (!matricule || !nom) return;
@@ -702,8 +901,9 @@ export default function App() {
     }
   };
 
+  // --- STATISTIQUES ---
   const getClassStats = () => {
-    if (!activeClass || activeClass.eleves.length === 0) return { moyenne: 0, taux: 0, top: '-', flop: '-' };
+    if (!activeClass || activeClass.eleves.length === 0) return { moyenne: 0, taux: 0, top: '-', flop: '-', saisis: 0, totalEleves: 0 };
     const matNotes = notes[selectedClassId]?.[activeEvaluation]?.[activeMatiere] || {};
     let total = 0, count = 0, admis = 0, maxNote = -1, minNote = 21, topStudent = '-', flopStudent = '-';
 
@@ -729,10 +929,20 @@ export default function App() {
 
   const stats = getClassStats();
 
-  const escapeCsv = (val) => `"${String(val ?? '').replace(/"/g, '""')}"`;
+  // --- EXPORT EDUCMASTER (.xlsx) ---
+  // Compte les cases qui ont une note mais pas de perfectionnement.
+  const countLoneNotes = () => {
+    let count = 0;
+    activeClass.eleves.forEach(el => {
+      MATIERES_PRIMAIRE.forEach(m => {
+        const d = notes[selectedClassId]?.[activeEvaluation]?.[m.id]?.[el.id];
+        if (d && d.note !== undefined && d.perf === undefined) count++;
+      });
+    });
+    return count;
+  };
 
   const exportToEducMaster = () => {
-    // Mode essai : un seul export gratuit autorisé, pour juger du rendu final.
     if (isTrial && !canExport) {
       triggerNotif("Vous avez déjà utilisé votre export d'essai gratuit (1/1). Abonnez-vous pour exporter sans limite.", 'error');
       setPaywallModal(true);
@@ -743,25 +953,33 @@ export default function App() {
       return;
     }
 
+    // Notes seules (sans perfectionnement) : proposer de les traiter comme notes TOTALES.
+    const lone = countLoneNotes();
+    const ventilateLone = lone > 0 && confirm(
+      `${lone} case(s) contiennent une note sans note de perfectionnement.\n\nOK = les considérer comme des notes TOTALES et les ventiler automatiquement (note + perfectionnement ≤ ${PERF_MAX}) dans le fichier exporté.\nAnnuler = exporter telles quelles (perfectionnement vide).\n\n(Vos données enregistrées ne sont pas modifiées.)`
+    );
+
     const row1 = ['Matricule', 'Nom', 'Prénoms'];
-    MATIERES_PRIMAIRE.forEach(m => {
-      const label = EDUCMASTER_COLUMN_NAMES[m.id] || m.label;
-      row1.push(label, '');
-    });
+    MATIERES_PRIMAIRE.forEach(m => row1.push(m.exportLabel, ''));
 
     const row2 = ['', '', ''];
-    MATIERES_PRIMAIRE.forEach(() => {
-      row2.push('Note obtenue', 'Note perfectionnement');
-    });
+    MATIERES_PRIMAIRE.forEach(() => row2.push(EDUCMASTER_SUBHEADERS.note, EDUCMASTER_SUBHEADERS.perf));
 
     const rows = [row1, row2];
 
     activeClass.eleves.forEach(el => {
       const row = [el.matricule, el.nom, el.prenoms];
       MATIERES_PRIMAIRE.forEach(m => {
-        const studentNote = notes[selectedClassId]?.[activeEvaluation]?.[m.id]?.[el.id] || {};
-        row.push(studentNote.note !== undefined ? studentNote.note : '');
-        row.push(studentNote.perf !== undefined ? studentNote.perf : '');
+        const d = notes[selectedClassId]?.[activeEvaluation]?.[m.id]?.[el.id] || {};
+        let noteOut = d.note;
+        let perfOut = d.perf;
+        if (ventilateLone && d.note !== undefined && d.perf === undefined) {
+          const split = ventilateTotal(d.note, ventilationStrategy);
+          noteOut = split.note;
+          perfOut = split.perf;
+        }
+        row.push(noteOut !== undefined ? noteOut : '');
+        row.push(perfOut !== undefined ? perfOut : '');
       });
       rows.push(row);
     });
@@ -785,19 +1003,13 @@ export default function App() {
     const link = document.createElement("a");
     link.setAttribute("href", url);
 
-    // --- NOMENCLATURE D'EXPORT ---
-    // Motif inspiré des fichiers officiels EducMaster observés
-    // ("{timestamp}_modelimportationnotes_{anneeScolaire}{etablissement}{niveau}.xlsx").
-    // À ajuster si EducMaster documente une norme différente pour les
-    // fichiers TÉLÉVERSÉS (upload) par les enseignants.
     const anneeScolaire = '20252026';
     const etablissementSlug = slugifyForFilename(user.etablissement) || 'ecole';
     const niveauSlug = slugifyForFilename(activeClass.niveau);
     const evaluationSlug = slugifyForFilename(
       EVALUATIONS.find(ev => ev.id === activeEvaluation)?.short || activeEvaluation
     );
-    const timestamp = Date.now();
-    const fileName = `${timestamp}_notesimportees_${anneeScolaire}${etablissementSlug}${niveauSlug}_${evaluationSlug}.xlsx`;
+    const fileName = `${Date.now()}_notesimportees_${anneeScolaire}${etablissementSlug}${niveauSlug}_${evaluationSlug}.xlsx`;
 
     link.setAttribute("download", fileName);
     document.body.appendChild(link);
@@ -812,6 +1024,7 @@ export default function App() {
     triggerNotif("Fichier Excel (.xlsx) EducMaster généré avec succès !", 'success');
   };
 
+  // --- LICENCE ---
   const computeExpirationLabel = (isoDateString, dureeMoisFallback) => {
     let d = null;
     if (isoDateString) {
@@ -877,163 +1090,264 @@ export default function App() {
     }
   };
 
+  // ==========================================================
+  // SCANNER IA — jusqu'à 5 images en parallèle + mode "Toutes les matières"
+  // ==========================================================
   const resetScan = () => {
-    setScanImage(null);
+    setScanFiles([]);
+    setScanStatus('idle');
+    setScanResults([]);
+    setScanErrorMsg('');
+    setScanProgressMsg('');
+    setScanReviewMatiere(null);
+  };
+
+  const removeScanFile = (id) => {
+    setScanFiles(prev => prev.filter(f => f.id !== id));
+  };
+
+  const handleScanFilesSelected = async (e) => {
+    const picked = Array.from(e.target.files || []);
+    e.target.value = '';
+    if (picked.length === 0) return;
+
+    const imageFiles = picked.filter(f => f.type.startsWith('image/'));
+    if (imageFiles.length < picked.length) {
+      triggerNotif("Seules les images sont acceptées (JPG, PNG, WebP...).", 'error');
+    }
+    const room = MAX_SCAN_FILES - scanFiles.length;
+    if (room <= 0) {
+      triggerNotif(`Maximum ${MAX_SCAN_FILES} images par analyse.`, 'error');
+      return;
+    }
+    const toAdd = imageFiles.slice(0, room);
+    if (imageFiles.length > room) {
+      triggerNotif(`Seules ${room} image(s) supplémentaire(s) ont été retenues (maximum ${MAX_SCAN_FILES}).`, 'error');
+    }
+
+    const prepared = await Promise.all(toAdd.map(async (file, idx) => {
+      const id = `scanfile-${Date.now()}-${idx}-${Math.random().toString(36).slice(2, 6)}`;
+      const name = file.name || `Image ${idx + 1}`;
+      try {
+        const img = await fileToCompressedImage(file);
+        return { id, name, ...img, status: 'pending', message: '' };
+      } catch (err) {
+        return { id, name, base64: null, mediaType: null, previewUrl: null, status: 'error', message: err?.message || 'Image illisible' };
+      }
+    }));
+
+    setScanFiles(prev => [...prev, ...prepared].slice(0, MAX_SCAN_FILES));
     setScanStatus('idle');
     setScanResults([]);
     setScanErrorMsg('');
   };
 
-  const handleScanFileSelected = (e) => {
-    const file = e.target.files?.[0];
-    e.target.value = '';
-    if (!file) return;
-    if (!file.type.startsWith('image/')) {
-      triggerNotif("Veuillez sélectionner un fichier image.", 'error');
-      return;
+  const findStudentForScanItem = (item) => {
+    const mat = (item.matricule ?? '').toString().replace(/^'/, '').trim();
+    if (mat) {
+      const byMat = activeClass.eleves.find(el => el.matricule.trim() === mat);
+      if (byMat) return byMat;
+    }
+    const nm = normalizeName(item.nom);
+    if (nm.length >= 4) {
+      return (
+        activeClass.eleves.find(el => normalizeName(`${el.nom} ${el.prenoms}`) === nm) ||
+        activeClass.eleves.find(el => {
+          const full = normalizeName(`${el.nom} ${el.prenoms}`);
+          return full.includes(nm) || nm.includes(full);
+        }) ||
+        null
+      );
+    }
+    return null;
+  };
+
+  // Transforme les valeurs brutes lues (note / perf / total) en { note, perf, ventilated }.
+  const resolveScanCell = (raw) => {
+    let note = toNum(raw.note);
+    let perf = toNum(raw.perf);
+    const total = toNum(raw.total);
+    let ventilated = false;
+
+    if (note !== null && perf !== null) {
+      // les deux sont lus : rien à calculer
+    } else if (note !== null && total !== null) {
+      perf = clamp(round2(total - note), 0, PERF_MAX);
+    } else if (perf !== null && total !== null) {
+      note = Math.max(0, round2(total - perf));
+    } else if (note === null && perf === null && total !== null) {
+      const split = ventilateTotal(total, ventilationStrategy);
+      note = split.note;
+      perf = split.perf;
+      ventilated = true;
     }
 
-    const reader = new FileReader();
-    reader.onload = () => {
-      const result = reader.result;
-      const base64 = result.split(',')[1];
-      setScanImage({ base64, mediaType: file.type, previewUrl: result });
-      setScanStatus('idle');
-      setScanResults([]);
-      setScanErrorMsg('');
-    };
-    reader.onerror = () => triggerNotif("Impossible de lire cette image.", 'error');
-    reader.readAsDataURL(file);
+    if (note === null) return null;
+    if (perf !== null) perf = clamp(perf, 0, PERF_MAX);
+    return { note: clamp(note, 0, 20), perf, ventilated };
+  };
+
+  // Fusionne les lectures de toutes les images (la première valeur non vide prime).
+  const mergeScanItems = (items, targetMatieres) => {
+    const targetIds = new Set(targetMatieres.map(m => m.id));
+    const pick = (a, b) => (a !== null && a !== undefined && a !== '' ? a : b);
+    const byStudent = {};
+
+    items.forEach(item => {
+      if (!item || typeof item !== 'object') return;
+      const student = findStudentForScanItem(item);
+      if (!student) return;
+      const notesObj = item.notes && typeof item.notes === 'object' ? item.notes : {};
+      Object.entries(notesObj).forEach(([mid, rawValue]) => {
+        if (!targetIds.has(mid) || rawValue === null || rawValue === undefined) return;
+        const raw = (typeof rawValue === 'number' || typeof rawValue === 'string') ? { total: rawValue } : rawValue;
+        if (typeof raw !== 'object') return;
+        const slot = byStudent[student.id] || (byStudent[student.id] = {});
+        const prev = slot[mid] || {};
+        slot[mid] = {
+          note: pick(prev.note, raw.note),
+          perf: pick(prev.perf, raw.perf),
+          total: pick(prev.total, raw.total)
+        };
+      });
+    });
+
+    return activeClass.eleves.map(el => {
+      const cells = {};
+      targetMatieres.forEach(m => {
+        const raw = byStudent[el.id]?.[m.id];
+        const resolved = raw ? resolveScanCell(raw) : null;
+        cells[m.id] = resolved
+          ? { note: String(resolved.note), perf: resolved.perf === null ? '' : String(resolved.perf), include: true, ventilated: resolved.ventilated }
+          : { note: '', perf: '', include: false, ventilated: false };
+      });
+      return { studentId: el.id, matricule: el.matricule, nom: `${el.nom} ${el.prenoms}`, cells };
+    });
   };
 
   const handleAnalyzeScan = async () => {
-    if (!scanImage || !activeClass) return;
+    const analyzable = scanFiles.filter(f => f.base64);
+    if (analyzable.length === 0 || !activeClass) return;
+
     setScanStatus('analyzing');
     setScanErrorMsg('');
-    setScanProgressMsg("Analyse en cours...");
-
+    setScanResults([]);
+    setScanProgressMsg(`Analyse de ${analyzable.length} image(s) en parallèle...`);
     const coldStartTimer = setTimeout(() => {
       setScanProgressMsg("Le serveur se réveille peut-être (jusqu'à 60 secondes après une période d'inactivité)... Merci de patienter.");
-    }, 5000);
+    }, 8000);
 
-    const controller = new AbortController();
-    const abortTimer = setTimeout(() => controller.abort(), 90000);
+    const targetMatieres = scanMode === 'all'
+      ? MATIERES_PRIMAIRE
+      : MATIERES_PRIMAIRE.filter(m => m.id === scanMatiere);
+    const evaluationLabel = EVALUATIONS.find(ev => ev.id === scanEvaluation)?.label || scanEvaluation;
+    const roster = activeClass.eleves.map(el => `${el.matricule} | ${el.nom} ${el.prenoms}`).join('\n');
+    const promptText = buildScanPrompt({ mode: scanMode, targetMatieres, roster, evaluationLabel });
 
-    try {
-      const roster = activeClass.eleves.map(el => `${el.matricule} | ${el.nom} ${el.prenoms}`).join('\n');
-      const matiereLabel = MATIERES_PRIMAIRE.find(m => m.id === scanMatiere)?.label || scanMatiere;
-      const evaluationLabel = EVALUATIONS.find(ev => ev.id === scanEvaluation)?.label || scanEvaluation;
+    setScanFiles(prev => prev.map(f => f.base64 ? { ...f, status: 'processing', message: '' } : f));
 
-      const promptText = `Tu analyses la photo d'une feuille de notes (manuscrite ou imprimée) d'une classe de primaire au Bénin, pour la matière "${matiereLabel}", dans le cadre de l'"${evaluationLabel}".
-Voici la liste des élèves de la classe, au format "matricule | Nom Prénoms" :
-${roster}
-
-Pour chaque ligne de la feuille que tu peux identifier avec certitude, associe-la au matricule correspondant de la liste ci-dessus (en te basant sur le nom écrit), et extrais la note obtenue sur 20 ainsi que la note de perfectionnement sur 20 si elle est présente.
-Réponds UNIQUEMENT avec un tableau JSON valide, sans aucun texte autour, sans balises markdown, au format exact suivant :
-[{"matricule":"24-CM2-001","note":14,"perf":15}]
-Utilise null pour perf si elle n'est pas visible sur la feuille. Si tu ne peux pas identifier le matricule d'une ligne avec certitude, ignore cette ligne.`;
-
-      const response = await fetch(SCAN_API_URL, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ imageBase64: scanImage.base64, mediaType: scanImage.mediaType, promptText }),
-        signal: controller.signal
-      });
-
-      if (!response.ok) {
-        const errData = await response.json().catch(() => ({}));
-        throw new Error(errData.error || `Erreur serveur : ${response.status}`);
+    const outcomes = await Promise.all(analyzable.map(async (file) => {
+      try {
+        const raw = await callScanApi(file, promptText);
+        const items = parseJsonArrayLenient(raw);
+        setScanFiles(prev => prev.map(f => f.id === file.id ? { ...f, status: 'done', message: `${items.length} élève(s) lu(s)` } : f));
+        return { ok: true, items };
+      } catch (err) {
+        console.error(err);
+        setScanFiles(prev => prev.map(f => f.id === file.id ? { ...f, status: 'error', message: err?.message || 'Échec' } : f));
+        return { ok: false, items: [] };
       }
+    }));
 
-      const data = await response.json();
-      const textBlock = typeof data.content === 'string' ? data.content : '';
-      const clean = textBlock.replace(/```json|```/g, '').trim();
-      const parsedArr = JSON.parse(clean);
+    clearTimeout(coldStartTimer);
+    setScanProgressMsg('');
 
-      const results = activeClass.eleves.map(el => {
-        const found = Array.isArray(parsedArr)
-          ? parsedArr.find(p => p.matricule && p.matricule.toString().trim() === el.matricule.trim())
-          : null;
-        const hasNote = found && found.note !== null && found.note !== undefined && found.note !== '';
-        const hasPerf = found && found.perf !== null && found.perf !== undefined && found.perf !== '';
-        return {
-          studentId: el.id, matricule: el.matricule, nom: `${el.nom} ${el.prenoms}`,
-          note: hasNote ? found.note.toString() : '',
-          perf: hasPerf ? found.perf.toString() : '',
-          include: !!hasNote
-        };
-      });
-
-      setScanResults(results);
-      setScanStatus('review');
-
-      const detectedCount = results.filter(r => r.include).length;
-      if (detectedCount === 0) {
-        triggerNotif("Aucune note n'a pu être identifiée automatiquement. Vous pouvez les saisir manuellement ci-dessous.", 'error');
-      } else {
-        triggerNotif(`${detectedCount} note(s) détectée(s) sur ${activeClass.eleves.length} élève(s). Vérifiez avant d'enregistrer.`, 'success');
-      }
-    } catch (err) {
-      console.error(err);
+    if (!outcomes.some(o => o.ok)) {
       setScanStatus('error');
-      if (err && err.name === 'AbortError') {
-        setScanErrorMsg("Le serveur met trop de temps à répondre (plus de 90 secondes). Il devrait être réveillé maintenant : réessayez.");
-      } else {
-        setScanErrorMsg(err?.message || "L'analyse a échoué. Vérifiez la netteté de la photo et réessayez.");
-      }
-    } finally {
-      clearTimeout(coldStartTimer);
-      clearTimeout(abortTimer);
-      setScanProgressMsg('');
+      setScanErrorMsg("Aucune image n'a pu être analysée. Vérifiez la netteté des photos et votre connexion, puis réessayez.");
+      return;
+    }
+
+    const rows = mergeScanItems(outcomes.flatMap(o => o.items), targetMatieres);
+    const firstDetected = targetMatieres.find(m => rows.some(r => r.cells[m.id].note !== ''));
+    const detectedCount = rows.reduce((acc, r) => acc + targetMatieres.filter(m => r.cells[m.id].note !== '').length, 0);
+
+    setScanResults(rows);
+    setScanReviewMatiere((firstDetected || targetMatieres[0]).id);
+    setScanStatus('review');
+
+    if (detectedCount === 0) {
+      triggerNotif("Aucune note n'a pu être identifiée automatiquement.", 'error');
+    } else {
+      const failed = outcomes.filter(o => !o.ok).length;
+      triggerNotif(
+        `${detectedCount} note(s) détectée(s). Vérifiez avant d'enregistrer.${failed > 0 ? ` (${failed} image(s) en échec)` : ''}`,
+        failed > 0 ? 'error' : 'success'
+      );
     }
   };
 
-  const updateScanResultField = (studentId, field, value) => {
-    setScanResults(prev => prev.map(r => r.studentId === studentId ? { ...r, [field]: value } : r));
+  const updateScanCell = (studentId, mid, patch) => {
+    setScanResults(prev => prev.map(r => r.studentId === studentId
+      ? { ...r, cells: { ...r.cells, [mid]: { ...r.cells[mid], ...patch } } }
+      : r));
   };
 
+  // Matières présentes dans les résultats (ordre EducMaster conservé)
+  const scanTargetMatieres = MATIERES_PRIMAIRE.filter(m => scanResults[0]?.cells?.[m.id]);
+  const scanVisibleMatieres = scanTargetMatieres.filter(m =>
+    scanTargetMatieres.length === 1 || scanResults.some(r => r.cells[m.id]?.note !== '')
+  );
+  const activeReviewMatiere =
+    scanVisibleMatieres.find(m => m.id === scanReviewMatiere)?.id || scanVisibleMatieres[0]?.id || null;
+  const scanDetectedCount = scanResults.reduce(
+    (acc, r) => acc + scanTargetMatieres.filter(m => r.cells[m.id]?.note !== '').length, 0
+  );
+
   const handleApplyScanResults = () => {
-    const toApply = scanResults.filter(r => r.include && r.note !== '');
-    if (toApply.length === 0) {
+    const writes = [];
+    for (const row of scanResults) {
+      for (const m of scanTargetMatieres) {
+        const cell = row.cells[m.id];
+        if (!cell || !cell.include || cell.note === '') continue;
+        const n = parseFloat(cell.note);
+        if (isNaN(n) || n < 0 || n > 20) {
+          triggerNotif(`Note invalide pour ${row.nom} (${m.short}) : doit être entre 0 et 20.`, 'error');
+          return;
+        }
+        let p;
+        if (cell.perf !== '') {
+          p = parseFloat(cell.perf);
+          if (isNaN(p) || p < 0 || p > PERF_MAX) {
+            triggerNotif(`Perfectionnement invalide pour ${row.nom} (${m.short}) : doit être entre 0 et ${PERF_MAX}.`, 'error');
+            return;
+          }
+        }
+        writes.push({ studentId: row.studentId, mid: m.id, note: n, perf: p });
+      }
+    }
+
+    if (writes.length === 0) {
       triggerNotif("Aucune note cochée à enregistrer.", 'error');
       return;
     }
 
-    for (const r of toApply) {
-      const n = parseFloat(r.note);
-      if (isNaN(n) || n < 0 || n > 20) {
-        triggerNotif(`Note invalide pour ${r.nom} (doit être entre 0 et 20).`, 'error');
-        return;
-      }
-      if (r.perf !== '') {
-        const p = parseFloat(r.perf);
-        if (isNaN(p) || p < 0 || p > 20) {
-          triggerNotif(`Note de perfectionnement invalide pour ${r.nom} (doit être entre 0 et 20).`, 'error');
-          return;
-        }
-      }
-    }
-
     setNotes(prev => {
       const classData = { ...(prev[selectedClassId] || {}) };
-      const evalData = { ...(classData[scanEvaluation] || {}) };
-      const matiereData = { ...(evalData[scanMatiere] || {}) };
-      toApply.forEach(r => {
-        matiereData[r.studentId] = {
-          note: parseFloat(r.note),
-          perf: r.perf !== '' ? parseFloat(r.perf) : undefined
-        };
+      const nextEval = { ...(classData[scanEvaluation] || {}) };
+      writes.forEach(w => {
+        nextEval[w.mid] = { ...(nextEval[w.mid] || {}), [w.studentId]: { note: w.note, perf: w.perf } };
       });
-      evalData[scanMatiere] = matiereData;
-      classData[scanEvaluation] = evalData;
+      classData[scanEvaluation] = nextEval;
       return { ...prev, [selectedClassId]: classData };
     });
 
-    triggerNotif(`${toApply.length} note(s) enregistrée(s) pour ${MATIERES_PRIMAIRE.find(m => m.id === scanMatiere)?.label}.`, 'success');
+    const nbMatieres = new Set(writes.map(w => w.mid)).size;
+    triggerNotif(`${writes.length} note(s) enregistrée(s) sur ${nbMatieres} matière(s).`, 'success');
     resetScan();
   };
 
-  // --- SAISIE VOCALE DÉDIÉE À L'ENRÔLEMENT ---
+  // --- ENRÔLEMENT : saisie vocale ---
   const handleEnrolVoiceField = (field) => {
     const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
     if (!SpeechRecognition) {
@@ -1111,7 +1425,8 @@ Utilise null pour perf si elle n'est pas visible sur la feuille. Si tu ne peux p
     triggerNotif("Candidat retiré de la liste d'enrôlement.");
   };
 
-  const handleEnrolScanFileSelected = (e) => {
+  // --- ENRÔLEMENT : scanner dédié ---
+  const handleEnrolScanFileSelected = async (e) => {
     const file = e.target.files?.[0];
     e.target.value = '';
     if (!file) return;
@@ -1119,17 +1434,15 @@ Utilise null pour perf si elle n'est pas visible sur la feuille. Si tu ne peux p
       triggerNotif("Veuillez sélectionner un fichier image.", 'error');
       return;
     }
-    const reader = new FileReader();
-    reader.onload = () => {
-      const result = reader.result;
-      const base64 = result.split(',')[1];
-      setEnrolScanImage({ base64, mediaType: file.type, previewUrl: result });
+    try {
+      const img = await fileToCompressedImage(file);
+      setEnrolScanImage(img);
       setEnrolScanStatus('idle');
       setEnrolScanResults([]);
       setEnrolScanErrorMsg('');
-    };
-    reader.onerror = () => triggerNotif("Impossible de lire cette image.", 'error');
-    reader.readAsDataURL(file);
+    } catch (err) {
+      triggerNotif(err?.message || "Impossible de lire cette image.", 'error');
+    }
   };
 
   const resetEnrolScan = () => {
@@ -1148,8 +1461,6 @@ Utilise null pour perf si elle n'est pas visible sur la feuille. Si tu ne peux p
     const coldStartTimer = setTimeout(() => {
       setEnrolScanProgressMsg("Le serveur se réveille peut-être (jusqu'à 60 secondes après une période d'inactivité)... Merci de patienter.");
     }, 5000);
-    const controller = new AbortController();
-    const abortTimer = setTimeout(() => controller.abort(), 90000);
 
     try {
       const promptText = `Tu analyses la photo d'une fiche d'enrôlement scolaire manuscrite ou imprimée, utilisée au Bénin pour inscrire de nouveaux élèves du Primaire.
@@ -1158,22 +1469,8 @@ Réponds UNIQUEMENT avec un tableau JSON valide, sans aucun texte autour, sans b
 [{"nom":"AFFO","prenoms":"Carina","sexe":"F","nationalite":"Béninoise","dateNaissance":"07/11/2016","lieuNaissance":"Houédogli","telephone":"151211364"}]
 Si une information est illisible ou absente, mets une chaîne vide "" pour ce champ. Si tu ne peux identifier aucune ligne avec certitude, réponds avec un tableau vide [].`;
 
-      const response = await fetch(SCAN_API_URL, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ imageBase64: enrolScanImage.base64, mediaType: enrolScanImage.mediaType, promptText }),
-        signal: controller.signal
-      });
-
-      if (!response.ok) {
-        const errData = await response.json().catch(() => ({}));
-        throw new Error(errData.error || `Erreur serveur : ${response.status}`);
-      }
-
-      const data = await response.json();
-      const textBlock = typeof data.content === 'string' ? data.content : '';
-      const clean = textBlock.replace(/```json|```/g, '').trim();
-      const parsedArr = JSON.parse(clean);
+      const raw = await callScanApi(enrolScanImage, promptText);
+      const parsedArr = parseJsonArrayLenient(raw);
 
       const results = (Array.isArray(parsedArr) ? parsedArr : []).map((p, idx) => ({
         tempId: `escan-${Date.now()}-${idx}`,
@@ -1198,14 +1495,9 @@ Si une information est illisible ou absente, mets une chaîne vide "" pour ce ch
     } catch (err) {
       console.error(err);
       setEnrolScanStatus('error');
-      if (err && err.name === 'AbortError') {
-        setEnrolScanErrorMsg("Le serveur met trop de temps à répondre. Réessayez.");
-      } else {
-        setEnrolScanErrorMsg(err?.message || "L'analyse a échoué. Vérifiez la netteté de la photo et réessayez.");
-      }
+      setEnrolScanErrorMsg(err?.message || "L'analyse a échoué. Vérifiez la netteté de la photo et réessayez.");
     } finally {
       clearTimeout(coldStartTimer);
-      clearTimeout(abortTimer);
       setEnrolScanProgressMsg('');
     }
   };
@@ -1257,8 +1549,7 @@ Si une information est illisible ou absente, mets une chaîne vide "" pour ce ch
     const anneeScolaire = '20252026';
     const etablissementSlug = slugifyForFilename(user.etablissement) || 'ecole';
     const niveauSlug = slugifyForFilename(activeClass?.niveau || 'Classe');
-    const timestamp = Date.now();
-    link.setAttribute("download", `${timestamp}_enrolement_${anneeScolaire}${etablissementSlug}${niveauSlug}.xlsx`);
+    link.setAttribute("download", `${Date.now()}_enrolement_${anneeScolaire}${etablissementSlug}${niveauSlug}.xlsx`);
 
     document.body.appendChild(link);
     link.click();
@@ -1267,6 +1558,7 @@ Si une information est illisible ou absente, mets une chaîne vide "" pour ce ch
     triggerNotif("Fichier Excel (.xlsx) d'enrôlement généré avec succès !", 'success');
   };
 
+  // --- ÉTABLISSEMENT / FICHES ---
   const handleLockEtablissement = () => {
     if (!user.etablissement.trim()) {
       triggerNotif("Veuillez renseigner le nom de votre établissement avant de verrouiller.", 'error');
@@ -1278,6 +1570,7 @@ Si une information est illisible ou absente, mets une chaîne vide "" pour ce ch
   };
 
   const handleOpenFiches = () => {
+    setMenuOpen(false);
     if (!isPremiumPlan) {
       triggerNotif("Les fiches pédagogiques sont réservées à la formule 5 Ans VIP.", 'error');
       setPaywallModal(true);
@@ -1285,6 +1578,94 @@ Si une information est illisible ou absente, mets une chaîne vide "" pour ce ch
     }
     window.open(FICHES_PEDAGOGIQUES_URL, '_blank', 'noopener,noreferrer');
   };
+
+  // --- ASSISTANT IA ---
+  const parseAssistantContent = (content) => {
+    const match = content.match(/\[ACTION:tab=([a-z]+)\]/i);
+    if (match && VALID_TABS.includes(match[1].toLowerCase())) {
+      return { text: content.replace(match[0], '').trim(), actionTab: match[1].toLowerCase() };
+    }
+    return { text: content, actionTab: null };
+  };
+
+  const handleSendAssistantMessage = async (textOverride) => {
+    const text = (textOverride ?? assistantInput).trim();
+    if (!text || assistantLoading) return;
+
+    const userMsg = { role: 'user', content: text };
+    const updatedHistory = [...assistantMessages, userMsg];
+    setAssistantMessages(updatedHistory);
+    setAssistantInput('');
+    setAssistantLoading(true);
+
+    try {
+      const response = await fetch(ASSISTANT_API_URL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          messages: updatedHistory,
+          context: {
+            activeTab,
+            statutAbonnement: user.statut_abonnement,
+            planLabel: user.plan,
+            niveau: activeClass?.niveau,
+            isTrial
+          }
+        })
+      });
+
+      if (!response.ok) {
+        const errData = await response.json().catch(() => ({}));
+        throw new Error(errData.error || `Erreur serveur : ${response.status}`);
+      }
+
+      const data = await response.json();
+      const replyText = typeof data.content === 'string' && data.content.trim()
+        ? data.content
+        : "Désolé, je n'ai pas pu générer de réponse. Réessayez.";
+
+      setAssistantMessages(prev => [...prev, { role: 'assistant', content: replyText }]);
+    } catch (err) {
+      console.error(err);
+      setAssistantMessages(prev => [...prev, {
+        role: 'assistant',
+        content: `Erreur : ${err?.message || "une erreur inconnue est survenue"}. Vérifiez votre connexion et réessayez dans quelques instants.`
+      }]);
+    } finally {
+      setAssistantLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    if (assistantScrollRef.current) {
+      assistantScrollRef.current.scrollTop = assistantScrollRef.current.scrollHeight;
+    }
+  }, [assistantMessages, assistantLoading]);
+
+  // --- Aperçu de la ventilation en mode "note totale" (saisie) ---
+  const saisieSplitPreview = (() => {
+    if (!saisieTotalMode || tempNote === '') return null;
+    const t = parseFloat(tempNote);
+    if (isNaN(t) || t < 0 || t > 20) return null;
+    return ventilateTotal(t, ventilationStrategy);
+  })();
+
+  const renderVentilationSelect = () => (
+    <div>
+      <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1.5 px-1 flex items-center gap-1">
+        <Wand2 className="w-3 h-3 text-amber-400" />
+        Ventilation de la note totale
+      </label>
+      <select
+        value={ventilationStrategy}
+        onChange={(e) => setVentilationStrategy(e.target.value)}
+        className="w-full bg-slate-900 border border-slate-800 text-slate-200 text-xs font-bold rounded-xl px-3 py-2.5 focus:outline-none focus:border-indigo-500"
+      >
+        {VENTILATION_STRATEGIES.map(s => (<option key={s.id} value={s.id}>{s.label}</option>))}
+      </select>
+      <p className="text-[10px] text-slate-500 mt-1.5 px-1">Total = note + perfectionnement (maximum {PERF_MAX}).</p>
+    </div>
+  );
 
   // ==========================================================
   // LANDING PAGE
@@ -1350,7 +1731,7 @@ Si une information est illisible ou absente, mets une chaîne vide "" pour ce ch
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5">
               {[
                 { icon: Mic, title: 'Saisie Vocale IA', desc: "Dictez vos notes à voix haute, sans jamais toucher le clavier.", bg: 'bg-indigo-500/10', text: 'text-indigo-400' },
-                { icon: Camera, title: 'Scanner Intelligent', desc: "Photographiez une feuille manuscrite : l'IA remplit vos notes automatiquement.", bg: 'bg-purple-500/10', text: 'text-purple-400' },
+                { icon: Camera, title: 'Scanner Intelligent', desc: "Photographiez jusqu'à 5 pages de registre : l'IA remplit toutes les matières automatiquement.", bg: 'bg-purple-500/10', text: 'text-purple-400' },
                 { icon: Upload, title: 'Import EducMaster', desc: "Importez votre liste d'élèves (CSV, Excel) en un clic, sans ressaisie.", bg: 'bg-violet-500/10', text: 'text-violet-400' },
                 { icon: Download, title: 'Export 100% Compatible', desc: "Générez le fichier exact accepté par le portail officiel EducMaster.", bg: 'bg-emerald-500/10', text: 'text-emerald-400' }
               ].map((feat, i) => (
@@ -1441,11 +1822,14 @@ Si une information est illisible ou absente, mets une chaîne vide "" pour ce ch
   // ==========================================================
   // TABLEAU DE BORD PRINCIPAL
   // ==========================================================
+  const drawerItemClass = "w-full flex items-center gap-3 px-3 py-3 rounded-xl text-sm font-semibold text-slate-200 hover:bg-slate-900 transition-colors text-left";
+  const navCount = (id) => (id === 'eleves' ? (activeClass?.eleves.length || 0) : id === 'enrolement' ? enrolements.length : null);
+
   return (
     <div className="min-h-screen bg-slate-900 text-slate-100 flex flex-col font-sans selection:bg-indigo-500 selection:text-white">
 
       {updateInfo && (
-        <div className="fixed bottom-4 left-1/2 transform -translate-x-1/2 z-50 w-[92vw] max-w-md bg-slate-950 border border-indigo-500/40 shadow-2xl rounded-2xl px-4 py-3.5 flex items-center gap-3">
+        <div className="fixed bottom-24 sm:bottom-4 left-1/2 transform -translate-x-1/2 z-50 w-[92vw] max-w-md bg-slate-950 border border-indigo-500/40 shadow-2xl rounded-2xl px-4 py-3.5 flex items-center gap-3">
           <div className="bg-indigo-500/10 border border-indigo-500/20 text-indigo-400 p-2 rounded-xl shrink-0">
             <Sparkles className="w-5 h-5" />
           </div>
@@ -1466,7 +1850,7 @@ Si une information est illisible ou absente, mets une chaîne vide "" pour ce ch
       )}
 
       {notif && (
-        <div className={`fixed top-4 left-1/2 transform -translate-x-1/2 z-50 px-4 py-3 rounded-xl shadow-2xl flex items-center gap-2 border text-sm transition-all duration-300 animate-bounce max-w-[90vw] ${
+        <div className={`fixed top-4 left-1/2 transform -translate-x-1/2 z-[60] px-4 py-3 rounded-xl shadow-2xl flex items-center gap-2 border text-sm transition-all duration-300 animate-bounce max-w-[90vw] ${
           notif.type === 'success' ? 'bg-emerald-950 border-emerald-500 text-emerald-200' : 'bg-rose-950 border-rose-500 text-rose-200'
         }`}>
           <CheckCircle className="w-5 h-5 shrink-0" />
@@ -1474,75 +1858,126 @@ Si une information est illisible ou absente, mets une chaîne vide "" pour ce ch
         </div>
       )}
 
+      {/* ---------------- EN-TÊTE ÉPURÉE ---------------- */}
       <header className="bg-slate-950 border-b border-slate-800 sticky top-0 z-40 px-4 py-3 shadow-lg">
-        <div className="max-w-6xl mx-auto flex items-center justify-between">
-          <div className="flex items-center gap-3">
+        <div className="max-w-6xl mx-auto flex items-center justify-between gap-3">
+          <div className="flex items-center gap-3 min-w-0">
             <button
               onClick={() => setHasEnteredApp(false)}
-              className="bg-gradient-to-tr from-indigo-600 to-purple-600 p-2.5 rounded-xl shadow-md shadow-indigo-900/30"
+              className="bg-gradient-to-tr from-indigo-600 to-purple-600 p-2.5 rounded-xl shadow-md shadow-indigo-900/30 shrink-0"
               title="Retour à l'accueil"
             >
               <BookOpen className="w-6 h-6 text-white" />
             </button>
-            <div>
+            <div className="min-w-0">
               <div className="flex items-center gap-1.5">
                 <h1 className="font-bold text-lg tracking-tight bg-gradient-to-r from-white via-slate-200 to-indigo-400 bg-clip-text text-transparent">
                   MastaNote AI+
                 </h1>
-                <span className="text-[10px] bg-indigo-500/20 text-indigo-300 border border-indigo-500/30 px-1.5 py-0.5 rounded-full font-semibold uppercase tracking-wider">
+                <span className="hidden sm:inline text-[10px] bg-indigo-500/20 text-indigo-300 border border-indigo-500/30 px-1.5 py-0.5 rounded-full font-semibold uppercase tracking-wider">
                   Primaire CI-CM2
                 </span>
               </div>
-              <p className="text-[11px] text-slate-400">Révolution EducMaster Bénin</p>
+              <p className="hidden sm:block text-[11px] text-slate-400">Révolution EducMaster Bénin</p>
             </div>
           </div>
 
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 shrink-0">
             <a
-              href="https://mastanote-secondaire-ai.onrender.com"
+              href={SECONDAIRE_URL}
               target="_blank"
               rel="noopener noreferrer"
-              className="relative bg-gradient-to-r from-violet-600 to-fuchsia-600 text-white font-bold text-xs px-3 sm:px-3.5 py-2 rounded-xl flex items-center gap-1.5 hover:opacity-95 transition-all shadow-lg shadow-violet-900/20"
+              className="relative hidden md:flex bg-gradient-to-r from-violet-600 to-fuchsia-600 text-white font-bold text-xs px-3.5 py-2 rounded-xl items-center gap-1.5 hover:opacity-95 transition-all shadow-lg shadow-violet-900/20"
               title="Accéder à MastaNote AI+ (Secondaire)"
             >
               <GraduationCap className="w-3.5 h-3.5 shrink-0" />
-              <span className="hidden sm:inline">MastaNote Secondaire</span>
-              <span className="sm:hidden">Secondaire</span>
+              MastaNote Secondaire
               <span className="absolute -top-2 -right-2 bg-amber-400 text-slate-950 text-[8px] font-black px-1.5 py-0.5 rounded-full uppercase shadow-md tracking-wide">
                 Nouveau
               </span>
             </a>
 
-            <button
-              onClick={handleOpenFiches}
-              className="bg-gradient-to-r from-amber-500 to-orange-500 text-slate-950 font-bold text-xs px-3.5 py-2 rounded-xl flex items-center gap-1.5 hover:opacity-95 transition-all shadow-lg shadow-orange-500/10"
-              title={isPremiumPlan ? "Ouvrir votre bibliothèque de fiches" : "Réservé à la formule 5 Ans VIP"}
-            >
-              <Download className="w-3.5 h-3.5" />
-              Télécharger Vos Fiches
-            </button>
-
-            {user.statut_abonnement !== 'demo' && (
-              <span className="bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 text-xs px-3 py-1.5 rounded-xl flex items-center gap-1.5 font-medium">
+            {!isTrial && (
+              <span className="hidden sm:flex bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 text-xs px-3 py-1.5 rounded-xl items-center gap-1.5 font-medium">
                 <span className="w-2.5 h-2.5 rounded-full bg-emerald-400 animate-pulse" />
                 Premium ({user.plan})
               </span>
             )}
 
             <button
-              onClick={() => setActiveTab('parametres')}
-              className={`p-2 rounded-xl border transition-colors ${activeTab === 'parametres' ? 'bg-slate-800 border-slate-700 text-white' : 'border-slate-800 hover:bg-slate-900 text-slate-400'}`}
-              title="Paramètres"
+              onClick={() => setMenuOpen(true)}
+              className="p-2 rounded-xl border border-slate-800 hover:bg-slate-900 text-slate-300 transition-colors"
+              title="Menu"
             >
-              <Settings className="w-5 h-5" />
+              <Menu className="w-5 h-5" />
             </button>
           </div>
         </div>
       </header>
 
+      {/* ---------------- TIROIR (MENU) ---------------- */}
+      {menuOpen && (
+        <div className="fixed inset-0 z-[55]">
+          <div className="absolute inset-0 bg-slate-950/70 backdrop-blur-sm" onClick={() => setMenuOpen(false)} />
+          <aside className="absolute right-0 top-0 h-full w-[85vw] max-w-xs bg-slate-950 border-l border-slate-800 shadow-2xl flex flex-col">
+            <div className="flex items-center justify-between px-4 py-3.5 border-b border-slate-800 shrink-0">
+              <span className="font-bold text-white text-sm">Menu</span>
+              <button onClick={() => setMenuOpen(false)} className="p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-slate-900">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="flex-1 overflow-y-auto p-4 space-y-4">
+              <div className="bg-slate-900 border border-slate-800 rounded-2xl p-4">
+                <p className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider">Compte</p>
+                <p className="text-sm font-bold text-white mt-0.5 truncate">{user.nom}</p>
+                <p className="text-xs text-slate-400 mt-1">
+                  {isTrial ? 'Mode essai gratuit' : `Premium — ${user.plan}`}
+                </p>
+                {isTrial && (
+                  <button
+                    onClick={() => { setMenuOpen(false); setPaywallModal(true); }}
+                    className="mt-3 w-full bg-gradient-to-r from-amber-500 to-orange-500 text-slate-950 font-black text-xs py-2 rounded-xl"
+                  >
+                    S'abonner
+                  </button>
+                )}
+              </div>
+
+              <div className="space-y-1">
+                <p className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider px-1 mb-1">Raccourcis</p>
+                <a href={SECONDAIRE_URL} target="_blank" rel="noopener noreferrer" className={drawerItemClass} onClick={() => setMenuOpen(false)}>
+                  <GraduationCap className="w-4 h-4 text-fuchsia-400" />
+                  <span className="flex-1">MastaNote Secondaire</span>
+                  <span className="bg-amber-400 text-slate-950 text-[8px] font-black px-1.5 py-0.5 rounded-full uppercase">Nouveau</span>
+                </a>
+                <button onClick={handleOpenFiches} className={drawerItemClass}>
+                  <Download className="w-4 h-4 text-amber-400" />
+                  <span className="flex-1">Télécharger Vos Fiches</span>
+                  {!isPremiumPlan && <Lock className="w-3.5 h-3.5 text-slate-500" />}
+                </button>
+              </div>
+
+              <div className="space-y-1">
+                <p className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider px-1 mb-1">Application</p>
+                <button onClick={() => goToTab('parametres')} className={drawerItemClass}>
+                  <Settings className="w-4 h-4 text-slate-400" />
+                  Paramètres
+                </button>
+                <button onClick={() => { setMenuOpen(false); setHasEnteredApp(false); }} className={drawerItemClass}>
+                  <BookOpen className="w-4 h-4 text-slate-400" />
+                  Page d'accueil
+                </button>
+              </div>
+            </div>
+          </aside>
+        </div>
+      )}
+
+      {/* ---------------- BARRE CLASSE ---------------- */}
       <section className="bg-slate-950/50 border-b border-slate-800/80 px-4 py-2.5">
         <div className="max-w-6xl mx-auto flex items-center justify-between gap-2">
-          <div className="flex items-center gap-2 w-full max-w-xs">
+          <div className="flex items-center gap-2 flex-1 max-w-xs min-w-0">
             <span className="text-xs font-semibold text-slate-400 uppercase tracking-wider hidden sm:inline">Classe :</span>
             <select
               value={selectedClassId}
@@ -1555,15 +1990,7 @@ Si une information est illisible ou absente, mets une chaîne vide "" pour ce ch
             </select>
           </div>
 
-          <div className="flex items-center gap-2 shrink-0">
-            <button
-              onClick={handleDeleteClass}
-              className="bg-slate-900 hover:bg-rose-950 border border-slate-800 hover:border-rose-800 text-xs text-rose-400 font-semibold px-3 py-1.5 rounded-xl flex items-center gap-1.5 transition-colors"
-              title="Supprimer la classe active"
-            >
-              <Trash2 className="w-4 h-4" />
-              <span className="hidden sm:inline">Supprimer</span>
-            </button>
+          <div className="relative flex items-center gap-2 shrink-0">
             <button
               onClick={() => setShowAddClassModal(true)}
               className="bg-slate-900 hover:bg-slate-800 border border-slate-800 text-xs text-indigo-400 font-semibold px-3 py-1.5 rounded-xl flex items-center gap-1.5 transition-colors"
@@ -1571,11 +1998,33 @@ Si une information est illisible ou absente, mets une chaîne vide "" pour ce ch
               <Plus className="w-4 h-4" />
               <span className="hidden sm:inline">Nouvelle classe</span>
             </button>
+            <button
+              onClick={() => setClassMenuOpen(o => !o)}
+              className="bg-slate-900 hover:bg-slate-800 border border-slate-800 text-slate-400 p-1.5 rounded-xl transition-colors"
+              title="Plus d'actions"
+            >
+              <MoreVertical className="w-4 h-4" />
+            </button>
+
+            {classMenuOpen && (
+              <>
+                <div className="fixed inset-0 z-30" onClick={() => setClassMenuOpen(false)} />
+                <div className="absolute right-0 top-full mt-2 z-40 w-52 bg-slate-950 border border-slate-800 rounded-xl shadow-2xl p-1.5">
+                  <button
+                    onClick={handleDeleteClass}
+                    className="w-full flex items-center gap-2.5 px-3 py-2.5 rounded-lg text-xs font-semibold text-rose-400 hover:bg-rose-950/50 transition-colors text-left"
+                  >
+                    <Trash2 className="w-4 h-4" />
+                    Supprimer la classe active
+                  </button>
+                </div>
+              </>
+            )}
           </div>
         </div>
       </section>
 
-      <main className="flex-1 max-w-6xl w-full mx-auto p-4 flex flex-col gap-6">
+      <main className="flex-1 max-w-6xl w-full mx-auto p-4 pb-24 sm:pb-6 flex flex-col gap-6">
 
         {showAddClassModal && (
           <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-sm flex items-center justify-center p-4 z-50">
@@ -1673,7 +2122,7 @@ Si une information est illisible ou absente, mets une chaîne vide "" pour ce ch
                     value={licenseKeyInput}
                     onChange={(e) => setLicenseKeyInput(e.target.value)}
                     disabled={activationStatus === 'validating'}
-                    className="flex-1 bg-slate-900 border border-slate-800 rounded-xl px-3.5 py-2.5 text-slate-200 text-sm font-mono text-center tracking-wider focus:outline-none focus:border-indigo-500 disabled:opacity-60"
+                    className="flex-1 min-w-0 bg-slate-900 border border-slate-800 rounded-xl px-3.5 py-2.5 text-slate-200 text-sm font-mono text-center tracking-wider focus:outline-none focus:border-indigo-500 disabled:opacity-60"
                   />
                   <button
                     onClick={handleActivateLicense}
@@ -1698,77 +2147,45 @@ Si une information est illisible ou absente, mets une chaîne vide "" pour ce ch
           </div>
         )}
 
-        <div className="flex border-b border-slate-800/80 overflow-x-auto whitespace-nowrap scrollbar-hide gap-1">
-          <button
-            onClick={() => setActiveTab('dashboard')}
-            className={`px-4 py-3 text-xs sm:text-sm font-semibold border-b-2 flex items-center gap-2 transition-all ${
-              activeTab === 'dashboard' ? 'border-indigo-500 text-white bg-slate-900/40' : 'border-transparent text-slate-400 hover:text-slate-200'
-            }`}
-          >
-            <TrendingUp className="w-4 h-4" />
-            Tableau de bord
-          </button>
-          <button
-            onClick={() => {
-              if (activeClass?.eleves.length > 0) setActiveTab('saisie');
-              else { triggerNotif("Veuillez d'abord ajouter des élèves à votre classe.", "error"); setActiveTab('eleves'); }
-            }}
-            className={`px-4 py-3 text-xs sm:text-sm font-semibold border-b-2 flex items-center gap-2 transition-all ${
-              activeTab === 'saisie' ? 'border-indigo-500 text-white bg-slate-900/40' : 'border-transparent text-slate-400 hover:text-slate-200'
-            }`}
-          >
-            <Mic className="w-4 h-4 text-indigo-400" />
-            Saisie Express (Vocal)
-          </button>
-          <button
-            onClick={() => {
-              if (activeClass?.eleves.length > 0) setActiveTab('scan');
-              else { triggerNotif("Veuillez d'abord ajouter des élèves à votre classe.", "error"); setActiveTab('eleves'); }
-            }}
-            className={`px-4 py-3 text-xs sm:text-sm font-semibold border-b-2 flex items-center gap-2 transition-all ${
-              activeTab === 'scan' ? 'border-indigo-500 text-white bg-slate-900/40' : 'border-transparent text-slate-400 hover:text-slate-200'
-            }`}
-          >
-            <Camera className="w-4 h-4 text-indigo-400" />
-            Scanner IA (Photo)
-          </button>
-          <button
-            onClick={() => setActiveTab('eleves')}
-            className={`px-4 py-3 text-xs sm:text-sm font-semibold border-b-2 flex items-center gap-2 transition-all ${
-              activeTab === 'eleves' ? 'border-indigo-500 text-white bg-slate-900/40' : 'border-transparent text-slate-400 hover:text-slate-200'
-            }`}
-          >
-            <Users className="w-4 h-4" />
-            Liste des Élèves ({activeClass?.eleves.length || 0})
-          </button>
-          <button
-            onClick={() => setActiveTab('enrolement')}
-            className={`px-4 py-3 text-xs sm:text-sm font-semibold border-b-2 flex items-center gap-2 transition-all ${
-              activeTab === 'enrolement' ? 'border-indigo-500 text-white bg-slate-900/40' : 'border-transparent text-slate-400 hover:text-slate-200'
-            }`}
-          >
-            <Plus className="w-4 h-4 text-emerald-400" />
-            Enrôler Vos Élèves ({enrolements.length})
-          </button>
+        {/* ---------------- ONGLETS (ordinateur / tablette) ---------------- */}
+        <div className="hidden sm:flex border-b border-slate-800/80 overflow-x-auto whitespace-nowrap scrollbar-hide gap-1">
+          {NAV_ITEMS.map(item => {
+            const Icon = item.icon;
+            const count = navCount(item.id);
+            const isActive = activeTab === item.id;
+            return (
+              <button
+                key={item.id}
+                onClick={() => goToTab(item.id)}
+                className={`px-4 py-3 text-xs sm:text-sm font-semibold border-b-2 flex items-center gap-2 transition-all ${
+                  isActive ? 'border-indigo-500 text-white bg-slate-900/40' : 'border-transparent text-slate-400 hover:text-slate-200'
+                }`}
+              >
+                <Icon className={`w-4 h-4 ${item.id === 'enrolement' ? 'text-emerald-400' : item.id === 'saisie' || item.id === 'scan' ? 'text-indigo-400' : ''}`} />
+                {item.label}{count !== null ? ` (${count})` : ''}
+              </button>
+            );
+          })}
         </div>
 
+        {/* ---------------- TABLEAU DE BORD ---------------- */}
         {activeTab === 'dashboard' && (
-          <div className="space-y-6">
-            <div className="bg-gradient-to-br from-indigo-950 via-slate-900 to-slate-950 border border-indigo-500/20 rounded-3xl p-6 relative overflow-hidden shadow-xl">
+          <div className="space-y-5">
+            <div className="bg-gradient-to-br from-indigo-950 via-slate-900 to-slate-950 border border-indigo-500/20 rounded-3xl p-5 sm:p-6 relative overflow-hidden shadow-xl">
               <div className="absolute top-0 right-0 p-4 opacity-5 pointer-events-none">
                 <FileSpreadsheet className="w-64 h-64" />
               </div>
-              <div className="flex flex-col md:flex-row md:items-center justify-between gap-6 relative z-10">
+              <div className="flex flex-col md:flex-row md:items-center justify-between gap-5 relative z-10">
                 <div>
                   <h2 className="font-extrabold text-xl sm:text-2xl text-white">Classe active : {activeClass?.nom}</h2>
                   <p className="text-slate-400 text-sm mt-1">Saisissez les notes puis générez le fichier compatible avec le portail officiel EducMaster Bénin.</p>
-                  <div className="flex flex-wrap gap-2 mt-4">
+                  <div className="flex flex-wrap gap-2 mt-3">
                     <span className="bg-slate-800 text-slate-300 text-xs px-3 py-1.5 rounded-xl font-medium">{activeClass?.eleves.length || 0} Élèves</span>
                     <span className="bg-slate-800 text-slate-300 text-xs px-3 py-1.5 rounded-xl font-medium">Niveau {activeClass?.niveau}</span>
                   </div>
                 </div>
                 <div className="flex flex-col sm:flex-row gap-3">
-                  <button onClick={() => setActiveTab('scan')} className="bg-slate-800 hover:bg-slate-700 text-white font-bold text-sm px-5 py-3 rounded-xl flex items-center justify-center gap-2 transition-all">
+                  <button onClick={() => goToTab('scan')} className="bg-slate-800 hover:bg-slate-700 text-white font-bold text-sm px-5 py-3 rounded-xl flex items-center justify-center gap-2 transition-all">
                     <Camera className="w-4 h-4" />
                     Scanner une feuille
                   </button>
@@ -1787,10 +2204,11 @@ Si une information est illisible ou absente, mets une chaîne vide "" pour ce ch
               </div>
             </div>
 
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            {/* Filtres regroupés */}
+            <div className="bg-slate-950 border border-slate-800/80 rounded-2xl p-4 space-y-4">
               <div className="space-y-2">
                 <h3 className="text-xs font-bold text-slate-400 uppercase tracking-widest">Matière</h3>
-                <div className="flex gap-2 overflow-x-auto pb-2 scrollbar-hide">
+                <div className="flex gap-2 overflow-x-auto pb-1 scrollbar-hide">
                   {MATIERES_PRIMAIRE.map(m => (
                     <button
                       key={m.id} onClick={() => setActiveMatiere(m.id)}
@@ -1801,7 +2219,6 @@ Si une information est illisible ou absente, mets une chaîne vide "" pour ce ch
                   ))}
                 </div>
               </div>
-
               <div className="space-y-2">
                 <h3 className="text-xs font-bold text-slate-400 uppercase tracking-widest">Type d'évaluation</h3>
                 <select
@@ -1814,52 +2231,52 @@ Si une information est illisible ou absente, mets une chaîne vide "" pour ce ch
               </div>
             </div>
 
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-              <div className="bg-slate-950 border border-slate-800/80 p-5 rounded-2xl flex items-center gap-4 shadow-sm">
-                <div className="p-3 bg-indigo-500/10 rounded-xl text-indigo-400"><TrendingUp className="w-6 h-6" /></div>
-                <div>
-                  <p className="text-[11px] font-semibold text-slate-500 uppercase">Moyenne de classe</p>
-                  <p className="text-2xl font-black text-white">{stats.moyenne} <span className="text-xs font-medium text-slate-400">/20</span></p>
+            <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
+              <div className="bg-slate-950 border border-slate-800/80 p-4 rounded-2xl flex items-center gap-3 shadow-sm">
+                <div className="p-2.5 bg-indigo-500/10 rounded-xl text-indigo-400 shrink-0"><TrendingUp className="w-5 h-5" /></div>
+                <div className="min-w-0">
+                  <p className="text-[10px] font-semibold text-slate-500 uppercase">Moyenne</p>
+                  <p className="text-xl sm:text-2xl font-black text-white">{stats.moyenne} <span className="text-xs font-medium text-slate-400">/20</span></p>
                 </div>
               </div>
-              <div className="bg-slate-950 border border-slate-800/80 p-5 rounded-2xl flex items-center gap-4 shadow-sm">
-                <div className="p-3 bg-emerald-500/10 rounded-xl text-emerald-400"><Award className="w-6 h-6" /></div>
-                <div>
-                  <p className="text-[11px] font-semibold text-slate-500 uppercase">Taux de réussite</p>
-                  <p className="text-2xl font-black text-white">{stats.taux}%</p>
+              <div className="bg-slate-950 border border-slate-800/80 p-4 rounded-2xl flex items-center gap-3 shadow-sm">
+                <div className="p-2.5 bg-emerald-500/10 rounded-xl text-emerald-400 shrink-0"><Award className="w-5 h-5" /></div>
+                <div className="min-w-0">
+                  <p className="text-[10px] font-semibold text-slate-500 uppercase">Réussite</p>
+                  <p className="text-xl sm:text-2xl font-black text-white">{stats.taux}%</p>
                 </div>
               </div>
-              <div className="bg-slate-950 border border-slate-800/80 p-5 rounded-2xl flex items-center gap-4 shadow-sm">
-                <div className="p-3 bg-amber-500/10 rounded-xl text-amber-400"><Users className="w-6 h-6" /></div>
-                <div>
-                  <p className="text-[11px] font-semibold text-slate-500 uppercase">Progression saisie</p>
-                  <p className="text-2xl font-black text-white">{stats.saisis} <span className="text-xs font-medium text-slate-400">/ {stats.totalEleves}</span></p>
+              <div className="bg-slate-950 border border-slate-800/80 p-4 rounded-2xl flex items-center gap-3 shadow-sm">
+                <div className="p-2.5 bg-amber-500/10 rounded-xl text-amber-400 shrink-0"><Users className="w-5 h-5" /></div>
+                <div className="min-w-0">
+                  <p className="text-[10px] font-semibold text-slate-500 uppercase">Saisie</p>
+                  <p className="text-xl sm:text-2xl font-black text-white">{stats.saisis} <span className="text-xs font-medium text-slate-400">/ {stats.totalEleves}</span></p>
                 </div>
               </div>
-              <div className="bg-slate-950 border border-slate-800/80 p-5 rounded-2xl flex items-center gap-4 shadow-sm">
-                <div className="p-3 bg-indigo-600/10 rounded-xl text-indigo-400"><Award className="w-6 h-6" /></div>
-                <div className="overflow-hidden">
-                  <p className="text-[11px] font-semibold text-slate-500 uppercase">Premier de la classe</p>
-                  <p className="text-sm font-bold text-white truncate max-w-[150px]" title={stats.top}>{stats.top}</p>
+              <div className="bg-slate-950 border border-slate-800/80 p-4 rounded-2xl flex items-center gap-3 shadow-sm">
+                <div className="p-2.5 bg-indigo-600/10 rounded-xl text-indigo-400 shrink-0"><Award className="w-5 h-5" /></div>
+                <div className="overflow-hidden min-w-0">
+                  <p className="text-[10px] font-semibold text-slate-500 uppercase">Premier</p>
+                  <p className="text-xs sm:text-sm font-bold text-white truncate" title={stats.top}>{stats.top}</p>
                 </div>
               </div>
             </div>
 
-            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-              <div className="bg-slate-950 border border-slate-800/80 rounded-2xl p-5 lg:col-span-2">
-                <h4 className="font-bold text-white mb-4 flex items-center gap-2">
-                  <FileSpreadsheet className="text-indigo-400 w-5 h-5" />
-                  Notes de {MATIERES_PRIMAIRE.find(m => m.id === activeMatiere)?.label} — {EVALUATIONS.find(ev => ev.id === activeEvaluation)?.label}
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
+              <div className="bg-slate-950 border border-slate-800/80 rounded-2xl p-4 sm:p-5 lg:col-span-2">
+                <h4 className="font-bold text-white mb-4 flex items-center gap-2 text-sm sm:text-base">
+                  <FileSpreadsheet className="text-indigo-400 w-5 h-5 shrink-0" />
+                  <span>Notes de {MATIERES_PRIMAIRE.find(m => m.id === activeMatiere)?.label} — {EVALUATIONS.find(ev => ev.id === activeEvaluation)?.label}</span>
                 </h4>
                 <div className="overflow-x-auto">
                   <table className="w-full text-left text-sm text-slate-300">
                     <thead className="bg-slate-900 text-slate-400 text-xs uppercase font-bold">
                       <tr>
-                        <th className="px-4 py-3 rounded-l-xl">Matricule</th>
-                        <th className="px-4 py-3">Élève</th>
-                        <th className="px-4 py-3 text-center">Note obtenue (/20)</th>
-                        <th className="px-4 py-3 text-center">Note Perf (/20)</th>
-                        <th className="px-4 py-3 text-center rounded-r-xl">Statut</th>
+                        <th className="px-3 py-3 rounded-l-xl hidden sm:table-cell">Matricule</th>
+                        <th className="px-3 py-3">Élève</th>
+                        <th className="px-3 py-3 text-center">Note</th>
+                        <th className="px-3 py-3 text-center">Perf (≤{PERF_MAX})</th>
+                        <th className="px-3 py-3 text-center rounded-r-xl">Statut</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-800/50">
@@ -1869,15 +2286,15 @@ Si une information est illisible ou absente, mets une chaîne vide "" pour ce ch
                         const p = noteData.perf;
                         return (
                           <tr key={el.id} className="hover:bg-slate-900/40">
-                            <td className="px-4 py-3 text-xs font-semibold text-slate-400">{el.matricule}</td>
-                            <td className="px-4 py-3 font-semibold text-white">{el.nom} {el.prenoms}</td>
-                            <td className="px-4 py-3 text-center font-black">
+                            <td className="px-3 py-3 text-xs font-semibold text-slate-400 hidden sm:table-cell">{el.matricule}</td>
+                            <td className="px-3 py-3 font-semibold text-white">{el.nom} {el.prenoms}</td>
+                            <td className="px-3 py-3 text-center font-black">
                               {n !== undefined ? (<span className={n >= 10 ? 'text-emerald-400' : 'text-rose-400'}>{n}</span>) : (<span className="text-slate-600">-</span>)}
                             </td>
-                            <td className="px-4 py-3 text-center">
+                            <td className="px-3 py-3 text-center">
                               {p !== undefined ? <span className="text-indigo-300">{p}</span> : <span className="text-slate-600">-</span>}
                             </td>
-                            <td className="px-4 py-3 text-center">
+                            <td className="px-3 py-3 text-center">
                               {n !== undefined ? (
                                 n >= 10 ? (<span className="bg-emerald-500/10 text-emerald-400 text-[10px] font-bold px-2.5 py-1 rounded-full uppercase">Moyen</span>)
                                   : (<span className="bg-rose-500/10 text-rose-400 text-[10px] font-bold px-2.5 py-1 rounded-full uppercase">Faible</span>)
@@ -1891,41 +2308,49 @@ Si une information est illisible ou absente, mets une chaîne vide "" pour ce ch
                 </div>
               </div>
 
-              <div className="bg-slate-950 border border-slate-800/80 rounded-2xl p-5 space-y-4 flex flex-col justify-between">
-                <div>
-                  <h4 className="font-bold text-white mb-3 flex items-center gap-2">
+              <div className="bg-slate-950 border border-slate-800/80 rounded-2xl p-4 sm:p-5">
+                <button
+                  onClick={() => setShowDiag(v => !v)}
+                  className="w-full flex items-center justify-between lg:cursor-default"
+                >
+                  <span className="font-bold text-white flex items-center gap-2 text-sm sm:text-base">
                     <AlertTriangle className="text-amber-500 w-5 h-5" />
                     Diagnostics
-                  </h4>
+                  </span>
+                  <ChevronDown className={`w-4 h-4 text-slate-400 transition-transform lg:hidden ${showDiag ? 'rotate-180' : ''}`} />
+                </button>
+
+                <div className={`${showDiag ? 'block' : 'hidden'} lg:block mt-3 space-y-4`}>
                   <p className="text-xs text-slate-400 leading-relaxed">
-                    Les indicateurs ci-dessous révèlent la performance d'apprentissage pour <strong className="text-indigo-300">{MATIERES_PRIMAIRE.find(m => m.id === activeMatiere)?.label}</strong> — <strong className="text-indigo-300">{EVALUATIONS.find(ev => ev.id === activeEvaluation)?.label}</strong>.
+                    Performance pour <strong className="text-indigo-300">{MATIERES_PRIMAIRE.find(m => m.id === activeMatiere)?.label}</strong> — <strong className="text-indigo-300">{EVALUATIONS.find(ev => ev.id === activeEvaluation)?.label}</strong>.
                   </p>
-                </div>
-                <div className="space-y-3">
-                  <div className="bg-slate-900 p-3.5 rounded-xl border border-slate-800">
-                    <p className="text-[10px] font-semibold text-slate-500 uppercase">Premier de Classe</p>
-                    <p className="text-sm font-extrabold text-indigo-400 mt-1">{stats.top}</p>
+                  <div className="space-y-3">
+                    <div className="bg-slate-900 p-3.5 rounded-xl border border-slate-800">
+                      <p className="text-[10px] font-semibold text-slate-500 uppercase">Premier de Classe</p>
+                      <p className="text-sm font-extrabold text-indigo-400 mt-1">{stats.top}</p>
+                    </div>
+                    <div className="bg-slate-900 p-3.5 rounded-xl border border-slate-800">
+                      <p className="text-[10px] font-semibold text-slate-500 uppercase">Dernier de Classe</p>
+                      <p className="text-sm font-extrabold text-rose-400 mt-1">{stats.flop}</p>
+                    </div>
                   </div>
-                  <div className="bg-slate-900 p-3.5 rounded-xl border border-slate-800">
-                    <p className="text-[10px] font-semibold text-slate-500 uppercase">Dernier de Classe</p>
-                    <p className="text-sm font-extrabold text-rose-400 mt-1">{stats.flop}</p>
+                  <div className="bg-indigo-950/20 border border-indigo-500/10 p-3 rounded-xl text-center">
+                    <p className="text-[10px] text-slate-400">Rappel EducMaster</p>
+                    <p className="text-[11px] font-semibold text-slate-300 mt-1">L'importation de notes requiert impérativement les deux notes (Note obtenue + Perfectionnement) pour chaque élève.</p>
                   </div>
-                </div>
-                <div className="bg-indigo-950/20 border border-indigo-500/10 p-3 rounded-xl text-center">
-                  <p className="text-[10px] text-slate-400">Rappel EducMaster</p>
-                  <p className="text-[11px] font-semibold text-slate-300 mt-1">L'importation de notes requiert impérativement les deux notes (Note obtenue + Perfectionnement) pour chaque élève.</p>
                 </div>
               </div>
             </div>
           </div>
         )}
 
+        {/* ---------------- SAISIE EXPRESS ---------------- */}
         {activeTab === 'saisie' && activeClass?.eleves.length > 0 && (
-          <div className="max-w-xl mx-auto w-full space-y-6">
+          <div className="max-w-xl mx-auto w-full space-y-5">
             <div className="flex items-center justify-between">
               <button onClick={() => setActiveTab('dashboard')} className="text-slate-400 hover:text-white flex items-center gap-1.5 text-sm font-medium">
                 <ArrowLeft className="w-4 h-4" />
-                Retour au tableau de bord
+                Retour
               </button>
               <span className="text-xs text-slate-400 font-semibold bg-slate-950 border border-slate-800 px-3 py-1 rounded-full">
                 {currentSaisieIndex + 1} / {activeClass.eleves.length} élèves
@@ -1956,9 +2381,9 @@ Si une information est illisible ou absente, mets une chaîne vide "" pour ce ch
               </div>
             </div>
 
-            <div className="bg-gradient-to-tr from-slate-950 to-slate-900 border border-slate-800/80 rounded-3xl p-6 shadow-xl relative overflow-hidden">
+            <div className="bg-gradient-to-tr from-slate-950 to-slate-900 border border-slate-800/80 rounded-3xl p-5 sm:p-6 shadow-xl relative overflow-hidden">
               <div className="absolute top-0 right-0 -mr-6 -mt-6 w-24 h-24 bg-indigo-500/5 rounded-full blur-xl" />
-              <div className="text-center space-y-1 mb-6">
+              <div className="text-center space-y-1 mb-5">
                 <span className="text-xs font-semibold text-slate-500 tracking-wider uppercase bg-slate-900 border border-slate-800 px-3 py-1 rounded-full">
                   Matricule : {activeEleve?.matricule || '-'}
                 </span>
@@ -1966,7 +2391,7 @@ Si une information est illisible ou absente, mets une chaîne vide "" pour ce ch
                 <p className="text-indigo-400 text-sm font-semibold">{activeEleve?.prenoms}</p>
               </div>
 
-              <div className="bg-slate-900/60 border border-slate-800 rounded-2xl p-4 mb-6 space-y-3 text-center">
+              <div className="bg-slate-900/60 border border-slate-800 rounded-2xl p-4 mb-5 space-y-3 text-center">
                 <div className="flex items-center justify-between">
                   <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Contrôle de saisie vocale IA</span>
                   {isListening && <span className="w-2 h-2 rounded-full bg-red-500 animate-ping" />}
@@ -1984,24 +2409,64 @@ Si une information est illisible ou absente, mets une chaîne vide "" pour ce ch
                 <p className="text-xs font-semibold text-slate-300">{voiceStatus}</p>
               </div>
 
-              <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-1.5">
-                  <label className="block text-xs font-bold text-slate-400 uppercase tracking-wider text-center">Note Obtenue</label>
-                  <input
-                    type="number" step="0.25" min="0" max="20" placeholder="Note /20"
-                    value={tempNote} onChange={(e) => setTempNote(e.target.value)}
-                    className="w-full bg-slate-950 border border-slate-800 rounded-2xl px-4 py-4 text-center text-xl font-black text-white focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                  />
+              {/* Interrupteur note totale */}
+              <button
+                type="button"
+                onClick={() => setSaisieTotalMode(v => !v)}
+                className={`w-full flex items-center justify-between rounded-2xl border px-4 py-3 mb-4 text-left transition-colors ${
+                  saisieTotalMode ? 'bg-indigo-500/10 border-indigo-500/50' : 'bg-slate-900/60 border-slate-800'
+                }`}
+              >
+                <span className="flex items-center gap-2 text-xs font-bold text-slate-200">
+                  <Wand2 className="w-4 h-4 text-amber-400" />
+                  Saisir la note totale (auto-ventilation)
+                </span>
+                <span className={`w-10 h-5 rounded-full relative transition-colors shrink-0 ${saisieTotalMode ? 'bg-indigo-600' : 'bg-slate-700'}`}>
+                  <span className={`absolute top-0.5 w-4 h-4 bg-white rounded-full transition-all ${saisieTotalMode ? 'left-5' : 'left-0.5'}`} />
+                </span>
+              </button>
+
+              {saisieTotalMode ? (
+                <div className="space-y-3">
+                  <div className="space-y-1.5">
+                    <label className="block text-xs font-bold text-slate-400 uppercase tracking-wider text-center">Note totale</label>
+                    <input
+                      type="number" step="0.25" min="0" max="20" placeholder="Total /20"
+                      value={tempNote} onChange={(e) => setTempNote(e.target.value)}
+                      className="w-full bg-slate-950 border border-slate-800 rounded-2xl px-4 py-4 text-center text-xl font-black text-white focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                    />
+                  </div>
+                  <div className="bg-slate-900/60 border border-slate-800 rounded-xl px-3 py-2.5 text-center text-xs text-slate-300 min-h-[2.5rem] flex items-center justify-center">
+                    {saisieSplitPreview ? (
+                      <span>
+                        → Note <strong className="text-white">{saisieSplitPreview.note}</strong> + Perf <strong className="text-indigo-300">{saisieSplitPreview.perf}</strong>
+                      </span>
+                    ) : (
+                      <span className="text-slate-500">Saisissez le total : il sera ventilé automatiquement.</span>
+                    )}
+                  </div>
+                  {renderVentilationSelect()}
                 </div>
-                <div className="space-y-1.5">
-                  <label className="block text-xs font-bold text-slate-400 uppercase tracking-wider text-center">Perfectionnement</label>
-                  <input
-                    type="number" step="0.25" min="0" max="20" placeholder="Soin /20"
-                    value={tempPerf} onChange={(e) => setTempPerf(e.target.value)}
-                    className="w-full bg-slate-950 border border-slate-800 rounded-2xl px-4 py-4 text-center text-xl font-black text-indigo-300 focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                  />
+              ) : (
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-1.5">
+                    <label className="block text-xs font-bold text-slate-400 uppercase tracking-wider text-center">Note Obtenue</label>
+                    <input
+                      type="number" step="0.25" min="0" max="20" placeholder="Note /20"
+                      value={tempNote} onChange={(e) => setTempNote(e.target.value)}
+                      className="w-full bg-slate-950 border border-slate-800 rounded-2xl px-4 py-4 text-center text-xl font-black text-white focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                    />
+                  </div>
+                  <div className="space-y-1.5">
+                    <label className="block text-xs font-bold text-slate-400 uppercase tracking-wider text-center">Perfectionnement</label>
+                    <input
+                      type="number" step="0.25" min="0" max={PERF_MAX} placeholder={`≤ ${PERF_MAX}`}
+                      value={tempPerf} onChange={(e) => setTempPerf(e.target.value)}
+                      className="w-full bg-slate-950 border border-slate-800 rounded-2xl px-4 py-4 text-center text-xl font-black text-indigo-300 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                    />
+                  </div>
                 </div>
-              </div>
+              )}
 
               <div className="flex items-center justify-between gap-3 mt-6 pt-2">
                 <button
@@ -2010,7 +2475,7 @@ Si une information est illisible ou absente, mets une chaîne vide "" pour ce ch
                 >Précédent</button>
                 <button
                   onClick={handleSaveCurrentAndNext}
-                  className="flex-2 bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-bold py-3.5 px-6 rounded-xl shadow-lg shadow-indigo-900/30 flex items-center justify-center gap-1.5 transition-colors"
+                  className="flex-[2] bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-bold py-3.5 px-4 rounded-xl shadow-lg shadow-indigo-900/30 flex items-center justify-center gap-1.5 transition-colors"
                 >Enregistrer & Suivant<ChevronRight className="w-4 h-4" /></button>
               </div>
             </div>
@@ -2021,38 +2486,70 @@ Si une information est illisible ou absente, mets une chaîne vide "" pour ce ch
           </div>
         )}
 
+        {/* ---------------- SCANNER IA ---------------- */}
         {activeTab === 'scan' && (
-          <div className="max-w-2xl mx-auto w-full space-y-6">
+          <div className="max-w-2xl mx-auto w-full space-y-5">
             <div className="flex items-center justify-between">
               <button onClick={() => setActiveTab('dashboard')} className="text-slate-400 hover:text-white flex items-center gap-1.5 text-sm font-medium">
                 <ArrowLeft className="w-4 h-4" />
-                Retour au tableau de bord
+                Retour
               </button>
             </div>
 
-            <div className="bg-gradient-to-tr from-slate-950 to-slate-900 border border-slate-800/80 rounded-3xl p-6 shadow-xl space-y-5">
+            <div className="bg-gradient-to-tr from-slate-950 to-slate-900 border border-slate-800/80 rounded-3xl p-5 sm:p-6 shadow-xl space-y-5">
               <div className="text-center space-y-1">
                 <div className="inline-flex bg-indigo-500/10 text-indigo-400 border border-indigo-500/20 p-3 rounded-2xl mb-1">
                   <Sparkles className="w-6 h-6" />
                 </div>
-                <h3 className="text-xl font-black text-white">Scanner IA de feuilles de notes</h3>
-                <p className="text-xs text-slate-400 max-w-md mx-auto">Prenez une photo (ou importez une image) d'une feuille de notes manuscrite ou imprimée : l'IA identifie les élèves et remplit les notes automatiquement.</p>
+                <h3 className="text-xl font-black text-white">Scanner IA de registres de notes</h3>
+                <p className="text-xs text-slate-400 max-w-md mx-auto">
+                  Importez jusqu'à {MAX_SCAN_FILES} images : elles sont analysées en même temps et les notes sont distribuées automatiquement.
+                </p>
               </div>
 
+              {/* Mode */}
+              <div className="grid grid-cols-2 gap-1.5 bg-slate-900 p-1 rounded-2xl border border-slate-800">
+                <button
+                  onClick={() => setScanMode('single')}
+                  disabled={scanStatus === 'review' || scanStatus === 'analyzing'}
+                  className={`py-2.5 rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 transition-colors disabled:opacity-60 ${
+                    scanMode === 'single' ? 'bg-indigo-600 text-white' : 'text-slate-400 hover:text-slate-200'
+                  }`}
+                >
+                  <FileSpreadsheet className="w-4 h-4" />
+                  Une matière
+                </button>
+                <button
+                  onClick={() => setScanMode('all')}
+                  disabled={scanStatus === 'review' || scanStatus === 'analyzing'}
+                  className={`py-2.5 rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 transition-colors disabled:opacity-60 ${
+                    scanMode === 'all' ? 'bg-indigo-600 text-white' : 'text-slate-400 hover:text-slate-200'
+                  }`}
+                >
+                  <Layers className="w-4 h-4" />
+                  Toutes les matières
+                </button>
+              </div>
+
+              {/* Réglages */}
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                <div>
-                  <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1.5 px-1">Matière concernée</label>
-                  <select
-                    value={scanMatiere} onChange={(e) => setScanMatiere(e.target.value)} disabled={scanStatus === 'review'}
-                    className="w-full bg-slate-900 border border-slate-800 text-slate-200 text-sm font-bold rounded-xl px-3 py-2.5 focus:outline-none focus:border-indigo-500 disabled:opacity-50"
-                  >
-                    {MATIERES_PRIMAIRE.map(m => (<option key={m.id} value={m.id}>{m.label}</option>))}
-                  </select>
-                </div>
-                <div>
+                {scanMode === 'single' && (
+                  <div>
+                    <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1.5 px-1">Matière concernée</label>
+                    <select
+                      value={scanMatiere} onChange={(e) => setScanMatiere(e.target.value)}
+                      disabled={scanStatus === 'review' || scanStatus === 'analyzing'}
+                      className="w-full bg-slate-900 border border-slate-800 text-slate-200 text-sm font-bold rounded-xl px-3 py-2.5 focus:outline-none focus:border-indigo-500 disabled:opacity-50"
+                    >
+                      {MATIERES_PRIMAIRE.map(m => (<option key={m.id} value={m.id}>{m.label}</option>))}
+                    </select>
+                  </div>
+                )}
+                <div className={scanMode === 'all' ? 'sm:col-span-2' : ''}>
                   <label className="block text-[10px] font-bold text-indigo-400 uppercase tracking-wider mb-1.5 px-1">Type d'évaluation *</label>
                   <select
-                    value={scanEvaluation} onChange={(e) => setScanEvaluation(e.target.value)} disabled={scanStatus === 'review'}
+                    value={scanEvaluation} onChange={(e) => setScanEvaluation(e.target.value)}
+                    disabled={scanStatus === 'review' || scanStatus === 'analyzing'}
                     className="w-full bg-slate-900 border border-indigo-500/50 text-slate-200 text-sm font-bold rounded-xl px-3 py-2.5 focus:outline-none focus:border-indigo-500 disabled:opacity-50"
                   >
                     {EVALUATIONS.map(ev => (<option key={ev.id} value={ev.id}>{ev.label}</option>))}
@@ -2060,44 +2557,90 @@ Si une information est illisible ou absente, mets une chaîne vide "" pour ce ch
                 </div>
               </div>
 
-              <input ref={cameraInputRef} type="file" accept="image/*" capture="environment" onChange={handleScanFileSelected} className="hidden" />
-              <input ref={galleryInputRef} type="file" accept="image/*" onChange={handleScanFileSelected} className="hidden" />
-
-              {!scanImage && (
-                <div className="grid grid-cols-2 gap-3">
-                  <button onClick={() => cameraInputRef.current?.click()} className="bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-sm py-4 rounded-2xl flex flex-col items-center justify-center gap-2 transition-colors">
-                    <Camera className="w-6 h-6" />
-                    Prendre une photo
-                  </button>
-                  <button onClick={() => galleryInputRef.current?.click()} className="bg-slate-800 hover:bg-slate-700 text-white font-bold text-sm py-4 rounded-2xl flex flex-col items-center justify-center gap-2 transition-colors">
-                    <ImageIcon className="w-6 h-6" />
-                    Choisir un fichier
-                  </button>
-                </div>
+              {scanMode === 'all' && (
+                <p className="text-[11px] text-slate-400 bg-indigo-950/20 border border-indigo-500/10 rounded-xl px-3 py-2">
+                  Les matières présentes sur l'image sont détectées automatiquement ; chaque note est placée dans la bonne colonne pour tous les élèves.
+                </p>
               )}
 
-              {scanImage && scanStatus !== 'review' && (
-                <div className="space-y-4">
-                  <div className="rounded-2xl overflow-hidden border border-slate-800 bg-slate-950">
-                    <img src={scanImage.previewUrl} alt="Feuille de notes à analyser" className="w-full max-h-80 object-contain" />
-                  </div>
+              {scanStatus !== 'review' && renderVentilationSelect()}
+
+              <input ref={cameraInputRef} type="file" accept="image/*" capture="environment" onChange={handleScanFilesSelected} className="hidden" />
+              <input ref={galleryInputRef} type="file" accept="image/*" multiple onChange={handleScanFilesSelected} className="hidden" />
+
+              {scanStatus !== 'review' && (
+                <>
+                  {scanFiles.length < MAX_SCAN_FILES && scanStatus !== 'analyzing' && (
+                    <div className="grid grid-cols-2 gap-3">
+                      <button onClick={() => cameraInputRef.current?.click()} className="bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-sm py-4 rounded-2xl flex flex-col items-center justify-center gap-2 transition-colors">
+                        <Camera className="w-6 h-6" />
+                        Prendre une photo
+                      </button>
+                      <button onClick={() => galleryInputRef.current?.click()} className="bg-slate-800 hover:bg-slate-700 text-white font-bold text-sm py-4 rounded-2xl flex flex-col items-center justify-center gap-2 transition-colors">
+                        <ImageIcon className="w-6 h-6" />
+                        Choisir (jusqu'à {MAX_SCAN_FILES})
+                      </button>
+                    </div>
+                  )}
+
+                  {scanFiles.length > 0 && (
+                    <div className="space-y-3">
+                      <div className="flex items-center justify-between text-[11px] text-slate-400">
+                        <span>{scanFiles.length}/{MAX_SCAN_FILES} image(s)</span>
+                        {scanStatus !== 'analyzing' && (
+                          <button onClick={resetScan} className="flex items-center gap-1 text-slate-400 hover:text-white">
+                            <RotateCcw className="w-3.5 h-3.5" />
+                            Tout effacer
+                          </button>
+                        )}
+                      </div>
+
+                      <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+                        {scanFiles.map(f => (
+                          <div key={f.id} className="relative rounded-2xl overflow-hidden border border-slate-800 bg-slate-950">
+                            {f.previewUrl ? (
+                              <img src={f.previewUrl} alt={f.name} className="w-full h-28 object-cover" />
+                            ) : (
+                              <div className="w-full h-28 flex items-center justify-center text-slate-600"><ImageIcon className="w-8 h-8" /></div>
+                            )}
+                            {scanStatus !== 'analyzing' && (
+                              <button
+                                onClick={() => removeScanFile(f.id)}
+                                className="absolute top-1.5 right-1.5 bg-slate-950/80 hover:bg-rose-600 text-white p-1 rounded-full transition-colors"
+                                title="Retirer cette image"
+                              >
+                                <X className="w-3.5 h-3.5" />
+                              </button>
+                            )}
+                            <div className={`px-2 py-1.5 text-[10px] font-semibold flex items-center gap-1.5 ${
+                              f.status === 'done' ? 'bg-emerald-950/70 text-emerald-300'
+                                : f.status === 'error' ? 'bg-rose-950/70 text-rose-300'
+                                : f.status === 'processing' ? 'bg-indigo-950/70 text-indigo-300'
+                                : 'bg-slate-900 text-slate-400'
+                            }`}>
+                              {f.status === 'processing' && <span className="w-3 h-3 border-2 border-indigo-300/40 border-t-indigo-300 rounded-full animate-spin shrink-0" />}
+                              <span className="truncate">
+                                {f.status === 'pending' ? 'En attente' : f.status === 'processing' ? 'Analyse…' : (f.message || (f.status === 'done' ? 'Terminé' : 'Erreur'))}
+                              </span>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
                   {scanStatus === 'error' && (
                     <div className="bg-rose-950/40 border border-rose-800/60 rounded-xl p-3 text-xs text-rose-300 flex items-center gap-2">
                       <AlertTriangle className="w-4 h-4 shrink-0" />
                       {scanErrorMsg}
                     </div>
                   )}
-                  <div className="flex gap-3">
+
+                  {scanFiles.some(f => f.base64) && (
                     <button
-                      onClick={resetScan} disabled={scanStatus === 'analyzing'}
-                      className="flex-1 bg-slate-900 hover:bg-slate-800 border border-slate-800 text-slate-300 text-sm font-semibold py-3 rounded-xl flex items-center justify-center gap-1.5 disabled:opacity-50 transition-colors"
-                    >
-                      <RotateCcw className="w-4 h-4" />
-                      Changer de photo
-                    </button>
-                    <button
-                      onClick={handleAnalyzeScan} disabled={scanStatus === 'analyzing'}
-                      className="flex-2 bg-gradient-to-r from-indigo-600 to-purple-600 hover:opacity-95 text-white text-sm font-bold py-3 px-6 rounded-xl shadow-lg shadow-indigo-900/30 flex items-center justify-center gap-2 disabled:opacity-60 transition-all"
+                      onClick={handleAnalyzeScan}
+                      disabled={scanStatus === 'analyzing'}
+                      className="w-full bg-gradient-to-r from-indigo-600 to-purple-600 hover:opacity-95 text-white text-sm font-bold py-3.5 px-6 rounded-xl shadow-lg shadow-indigo-900/30 flex items-center justify-center gap-2 disabled:opacity-60 transition-all"
                     >
                       {scanStatus === 'analyzing' ? (
                         <>
@@ -2107,64 +2650,115 @@ Si une information est illisible ou absente, mets une chaîne vide "" pour ce ch
                       ) : (
                         <>
                           <Sparkles className="w-4 h-4" />
-                          Analyser avec l'IA
+                          Analyser {scanFiles.filter(f => f.base64).length} image(s) avec l'IA
                         </>
                       )}
                     </button>
-                  </div>
+                  )}
+
                   {scanStatus === 'analyzing' && scanProgressMsg && (
                     <p className="text-center text-xs text-slate-400 italic">{scanProgressMsg}</p>
                   )}
-                </div>
+                </>
               )}
 
+              {/* RÉVISION DES RÉSULTATS */}
               {scanStatus === 'review' && (
                 <div className="space-y-4">
-                  <div className="rounded-2xl overflow-hidden border border-slate-800 bg-slate-950">
-                    <img src={scanImage.previewUrl} alt="Feuille de notes analysée" className="w-full max-h-56 object-contain" />
+                  <div className="bg-indigo-950/20 border border-indigo-500/10 rounded-xl p-3 text-xs text-slate-300 space-y-1">
+                    <p><strong className="text-white">{scanDetectedCount}</strong> note(s) détectée(s). Vérifiez avant d'enregistrer ; décochez ou corrigez si besoin.</p>
+                    <p className="text-slate-400 flex items-center gap-1.5">
+                      <Wand2 className="w-3.5 h-3.5 text-amber-400 shrink-0" />
+                      Les notes marquées ont été ventilées automatiquement depuis la note totale (note + perfectionnement ≤ {PERF_MAX}).
+                    </p>
                   </div>
-                  <div className="bg-indigo-950/20 border border-indigo-500/10 rounded-xl p-3 text-xs text-slate-300">
-                    Vérifiez les notes détectées ci-dessous avant d'enregistrer. Décochez ou corrigez une ligne si besoin.
-                  </div>
-                  <div className="overflow-x-auto rounded-xl border border-slate-800">
-                    <table className="w-full text-left text-xs text-slate-300">
-                      <thead className="bg-slate-900 text-slate-400 uppercase font-bold">
-                        <tr>
-                          <th className="px-3 py-2">✓</th>
-                          <th className="px-3 py-2">Élève</th>
-                          <th className="px-3 py-2 text-center">Note</th>
-                          <th className="px-3 py-2 text-center">Perf</th>
-                        </tr>
-                      </thead>
-                      <tbody className="divide-y divide-slate-800/50">
-                        {scanResults.map(r => (
-                          <tr key={r.studentId} className={r.include ? '' : 'opacity-50'}>
-                            <td className="px-3 py-2">
-                              <input type="checkbox" checked={r.include} onChange={(e) => updateScanResultField(r.studentId, 'include', e.target.checked)} className="w-4 h-4 accent-indigo-500" />
-                            </td>
-                            <td className="px-3 py-2 font-semibold text-white whitespace-normal">{r.nom}</td>
-                            <td className="px-3 py-2 text-center">
-                              <input
-                                type="number" min="0" max="20" step="0.25" value={r.note}
-                                onChange={(e) => updateScanResultField(r.studentId, 'note', e.target.value)}
-                                className="w-16 bg-slate-950 border border-slate-800 rounded-lg px-2 py-1 text-center text-white focus:outline-none focus:border-indigo-500"
-                              />
-                            </td>
-                            <td className="px-3 py-2 text-center">
-                              <input
-                                type="number" min="0" max="20" step="0.25" value={r.perf}
-                                onChange={(e) => updateScanResultField(r.studentId, 'perf', e.target.value)}
-                                className="w-16 bg-slate-950 border border-slate-800 rounded-lg px-2 py-1 text-center text-indigo-300 focus:outline-none focus:border-indigo-500"
-                              />
-                            </td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
+
+                  {scanVisibleMatieres.length === 0 ? (
+                    <div className="text-center py-8 border border-dashed border-slate-800 rounded-xl text-xs text-slate-400">
+                      Aucune matière n'a pu être lue sur ces images. Essayez des photos plus nettes ou saisissez les notes manuellement.
+                    </div>
+                  ) : (
+                    <>
+                      <div className="flex gap-2 overflow-x-auto pb-1 scrollbar-hide">
+                        {scanVisibleMatieres.map(m => {
+                          const count = scanResults.filter(r => r.cells[m.id]?.note !== '').length;
+                          return (
+                            <button
+                              key={m.id}
+                              onClick={() => setScanReviewMatiere(m.id)}
+                              className={`px-3 py-2 text-xs font-bold rounded-xl border shrink-0 transition-all flex items-center gap-1.5 ${
+                                activeReviewMatiere === m.id ? 'bg-indigo-500/10 border-indigo-500 text-indigo-400' : 'bg-slate-950 border-slate-800/80 text-slate-400 hover:text-slate-300'
+                              }`}
+                            >
+                              {m.short}
+                              <span className="bg-slate-800 text-slate-300 text-[10px] px-1.5 py-0.5 rounded-full">{count}</span>
+                            </button>
+                          );
+                        })}
+                      </div>
+
+                      <div className="overflow-x-auto rounded-xl border border-slate-800">
+                        <table className="w-full text-left text-xs text-slate-300">
+                          <thead className="bg-slate-900 text-slate-400 uppercase font-bold">
+                            <tr>
+                              <th className="px-3 py-2">✓</th>
+                              <th className="px-3 py-2">Élève</th>
+                              <th className="px-3 py-2 text-center">Note</th>
+                              <th className="px-3 py-2 text-center">Perf</th>
+                              <th className="px-3 py-2 text-center">Total</th>
+                            </tr>
+                          </thead>
+                          <tbody className="divide-y divide-slate-800/50">
+                            {scanResults.map(r => {
+                              const cell = r.cells[activeReviewMatiere];
+                              if (!cell) return null;
+                              const total = cell.note !== '' ? round2((parseFloat(cell.note) || 0) + (parseFloat(cell.perf) || 0)) : '-';
+                              return (
+                                <tr key={r.studentId} className={cell.include ? '' : 'opacity-50'}>
+                                  <td className="px-3 py-2">
+                                    <input
+                                      type="checkbox" checked={cell.include}
+                                      onChange={(e) => updateScanCell(r.studentId, activeReviewMatiere, { include: e.target.checked })}
+                                      className="w-4 h-4 accent-indigo-500"
+                                    />
+                                  </td>
+                                  <td className="px-3 py-2 font-semibold text-white whitespace-normal">
+                                    {r.nom}
+                                    {cell.ventilated && (
+                                      <span title="Ventilée automatiquement depuis la note totale" className="inline-block ml-1.5 align-middle">
+                                        <Wand2 className="w-3.5 h-3.5 text-amber-400" />
+                                      </span>
+                                    )}
+                                  </td>
+                                  <td className="px-3 py-2 text-center">
+                                    <input
+                                      type="number" min="0" max="20" step="0.25" value={cell.note}
+                                      onChange={(e) => updateScanCell(r.studentId, activeReviewMatiere, { note: e.target.value, ventilated: false, include: e.target.value !== '' })}
+                                      className="w-16 bg-slate-950 border border-slate-800 rounded-lg px-2 py-1 text-center text-white focus:outline-none focus:border-indigo-500"
+                                    />
+                                  </td>
+                                  <td className="px-3 py-2 text-center">
+                                    <input
+                                      type="number" min="0" max={PERF_MAX} step="0.25" value={cell.perf}
+                                      onChange={(e) => updateScanCell(r.studentId, activeReviewMatiere, { perf: e.target.value, ventilated: false })}
+                                      className="w-16 bg-slate-950 border border-slate-800 rounded-lg px-2 py-1 text-center text-indigo-300 focus:outline-none focus:border-indigo-500"
+                                    />
+                                  </td>
+                                  <td className="px-3 py-2 text-center font-bold text-slate-200">{total}</td>
+                                </tr>
+                              );
+                            })}
+                          </tbody>
+                        </table>
+                      </div>
+                    </>
+                  )}
+
                   <div className="flex gap-3">
                     <button onClick={resetScan} className="flex-1 bg-slate-900 hover:bg-slate-800 border border-slate-800 text-slate-300 text-sm font-semibold py-3 rounded-xl transition-colors">Annuler</button>
-                    <button onClick={handleApplyScanResults} className="flex-2 bg-gradient-to-r from-emerald-500 to-teal-500 text-slate-950 font-black text-sm py-3 px-6 rounded-xl shadow-lg shadow-emerald-500/10 hover:opacity-95 transition-all">Enregistrer les notes cochées</button>
+                    <button onClick={handleApplyScanResults} className="flex-[2] bg-gradient-to-r from-emerald-500 to-teal-500 text-slate-950 font-black text-sm py-3 px-4 rounded-xl shadow-lg shadow-emerald-500/10 hover:opacity-95 transition-all">
+                      Enregistrer les notes cochées
+                    </button>
                   </div>
                 </div>
               )}
@@ -2172,8 +2766,9 @@ Si une information est illisible ou absente, mets une chaîne vide "" pour ce ch
           </div>
         )}
 
+        {/* ---------------- LISTE DES ÉLÈVES ---------------- */}
         {activeTab === 'eleves' && (
-          <div className="space-y-6">
+          <div className="space-y-5">
             <div className="bg-gradient-to-r from-violet-950 via-slate-900 to-slate-950 border border-violet-500/20 rounded-2xl p-5 flex flex-col sm:flex-row items-center justify-between gap-4">
               <div className="flex items-center gap-4">
                 <div className="bg-violet-500/10 border border-violet-500/20 text-violet-400 p-3 rounded-2xl shrink-0">
@@ -2198,7 +2793,7 @@ Si une information est illisible ou absente, mets une chaîne vide "" pour ce ch
               </button>
             </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
               <div className="bg-slate-950 border border-slate-800 rounded-2xl p-5 space-y-4 h-fit">
                 <h4 className="font-bold text-white text-md flex items-center gap-2">
                   <Plus className="text-indigo-400" />
@@ -2251,14 +2846,14 @@ Si une information est illisible ou absente, mets une chaîne vide "" pour ce ch
                 {activeClass?.eleves.length === 0 ? (
                   <div className="text-center py-12 space-y-2 border border-dashed border-slate-800 rounded-xl">
                     <p className="text-sm text-slate-400 font-medium">Aucun élève inscrit dans cette classe.</p>
-                    <p className="text-xs text-slate-600">Saisissez vos élèves un par un via le formulaire de gauche, ou importez le fichier EducMaster ci-dessus.</p>
+                    <p className="text-xs text-slate-600">Saisissez vos élèves un par un via le formulaire, ou importez le fichier EducMaster ci-dessus.</p>
                   </div>
                 ) : (
                   <div className="overflow-x-auto">
                     <table className="w-full text-left text-sm text-slate-300">
                       <thead className="bg-slate-900 text-slate-400 text-xs uppercase font-bold">
                         <tr>
-                          <th className="px-4 py-3 rounded-l-xl">Matricule</th>
+                          <th className="px-4 py-3 rounded-l-xl hidden sm:table-cell">Matricule</th>
                           <th className="px-4 py-3">Nom complet</th>
                           <th className="px-4 py-3 text-right rounded-r-xl">Actions</th>
                         </tr>
@@ -2266,7 +2861,7 @@ Si une information est illisible ou absente, mets une chaîne vide "" pour ce ch
                       <tbody className="divide-y divide-slate-800/40">
                         {activeClass?.eleves.map(el => (
                           <tr key={el.id} className="hover:bg-slate-900/30">
-                            <td className="px-4 py-3 text-xs font-semibold text-slate-500">{el.matricule}</td>
+                            <td className="px-4 py-3 text-xs font-semibold text-slate-500 hidden sm:table-cell">{el.matricule}</td>
                             <td className="px-4 py-3 font-semibold text-white">{el.nom} {el.prenoms}</td>
                             <td className="px-4 py-3 text-right">
                               <button
@@ -2288,8 +2883,9 @@ Si une information est illisible ou absente, mets une chaîne vide "" pour ce ch
           </div>
         )}
 
+        {/* ---------------- ENRÔLEMENT ---------------- */}
         {activeTab === 'enrolement' && (
-          <div className="max-w-3xl mx-auto w-full space-y-6">
+          <div className="max-w-3xl mx-auto w-full space-y-5">
             <div className="bg-gradient-to-tr from-emerald-950 to-slate-900 border border-emerald-500/20 rounded-3xl p-6 shadow-xl space-y-2 text-center">
               <div className="inline-flex bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 p-3 rounded-2xl mb-1">
                 <Plus className="w-6 h-6" />
@@ -2298,118 +2894,126 @@ Si une information est illisible ou absente, mets une chaîne vide "" pour ce ch
               <p className="text-xs text-slate-400 max-w-md mx-auto">Inscrivez de nouveaux élèves au format exact attendu par EducMaster pour l'enrôlement (le matricule sera généré par EducMaster après validation).</p>
             </div>
 
+            {/* Scanner repliable */}
             <div className="bg-slate-950 border border-slate-800/80 rounded-3xl p-5 space-y-4">
-              <h4 className="font-bold text-white text-sm flex items-center gap-2">
-                <Camera className="text-indigo-400 w-4 h-4" />
-                Scanner une fiche d'enrôlement
-              </h4>
+              <button onClick={() => setEnrolScanOpen(o => !o)} className="w-full flex items-center justify-between">
+                <span className="font-bold text-white text-sm flex items-center gap-2">
+                  <Camera className="text-indigo-400 w-4 h-4" />
+                  Scanner une fiche d'enrôlement
+                </span>
+                <ChevronDown className={`w-4 h-4 text-slate-400 transition-transform ${enrolScanOpen ? 'rotate-180' : ''}`} />
+              </button>
 
-              <input ref={enrolCameraInputRef} type="file" accept="image/*" capture="environment" onChange={handleEnrolScanFileSelected} className="hidden" />
-              <input ref={enrolGalleryInputRef} type="file" accept="image/*" onChange={handleEnrolScanFileSelected} className="hidden" />
+              {enrolScanOpen && (
+                <div className="space-y-4">
+                  <input ref={enrolCameraInputRef} type="file" accept="image/*" capture="environment" onChange={handleEnrolScanFileSelected} className="hidden" />
+                  <input ref={enrolGalleryInputRef} type="file" accept="image/*" onChange={handleEnrolScanFileSelected} className="hidden" />
 
-              {!enrolScanImage && (
-                <div className="grid grid-cols-2 gap-3">
-                  <button onClick={() => enrolCameraInputRef.current?.click()} className="bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-sm py-3.5 rounded-2xl flex flex-col items-center justify-center gap-2 transition-colors">
-                    <Camera className="w-5 h-5" />
-                    Prendre une photo
-                  </button>
-                  <button onClick={() => enrolGalleryInputRef.current?.click()} className="bg-slate-800 hover:bg-slate-700 text-white font-bold text-sm py-3.5 rounded-2xl flex flex-col items-center justify-center gap-2 transition-colors">
-                    <ImageIcon className="w-5 h-5" />
-                    Choisir un fichier
-                  </button>
-                </div>
-              )}
-
-              {enrolScanImage && enrolScanStatus !== 'review' && (
-                <div className="space-y-3">
-                  <div className="rounded-2xl overflow-hidden border border-slate-800 bg-slate-900">
-                    <img src={enrolScanImage.previewUrl} alt="Fiche d'enrôlement à analyser" className="w-full max-h-72 object-contain" />
-                  </div>
-                  {enrolScanStatus === 'error' && (
-                    <div className="bg-rose-950/40 border border-rose-800/60 rounded-xl p-3 text-xs text-rose-300 flex items-center gap-2">
-                      <AlertTriangle className="w-4 h-4 shrink-0" />
-                      {enrolScanErrorMsg}
+                  {!enrolScanImage && (
+                    <div className="grid grid-cols-2 gap-3">
+                      <button onClick={() => enrolCameraInputRef.current?.click()} className="bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-sm py-3.5 rounded-2xl flex flex-col items-center justify-center gap-2 transition-colors">
+                        <Camera className="w-5 h-5" />
+                        Prendre une photo
+                      </button>
+                      <button onClick={() => enrolGalleryInputRef.current?.click()} className="bg-slate-800 hover:bg-slate-700 text-white font-bold text-sm py-3.5 rounded-2xl flex flex-col items-center justify-center gap-2 transition-colors">
+                        <ImageIcon className="w-5 h-5" />
+                        Choisir un fichier
+                      </button>
                     </div>
                   )}
-                  <div className="flex gap-3">
-                    <button onClick={resetEnrolScan} disabled={enrolScanStatus === 'analyzing'} className="flex-1 bg-slate-900 hover:bg-slate-800 border border-slate-800 text-slate-300 text-sm font-semibold py-3 rounded-xl flex items-center justify-center gap-1.5 disabled:opacity-50 transition-colors">
-                      <RotateCcw className="w-4 h-4" />
-                      Changer de photo
-                    </button>
-                    <button onClick={handleAnalyzeEnrolScan} disabled={enrolScanStatus === 'analyzing'} className="flex-2 bg-gradient-to-r from-indigo-600 to-purple-600 hover:opacity-95 text-white text-sm font-bold py-3 px-6 rounded-xl shadow-lg shadow-indigo-900/30 flex items-center justify-center gap-2 disabled:opacity-60 transition-all">
-                      {enrolScanStatus === 'analyzing' ? (
-                        <>
-                          <span className="w-4 h-4 border-2 border-white/40 border-t-white rounded-full animate-spin" />
-                          Analyse en cours...
-                        </>
-                      ) : (
-                        <>
-                          <Sparkles className="w-4 h-4" />
-                          Analyser avec l'IA
-                        </>
-                      )}
-                    </button>
-                  </div>
-                  {enrolScanStatus === 'analyzing' && enrolScanProgressMsg && (
-                    <p className="text-center text-xs text-slate-400 italic">{enrolScanProgressMsg}</p>
-                  )}
-                </div>
-              )}
 
-              {enrolScanStatus === 'review' && (
-                <div className="space-y-3">
-                  <div className="bg-indigo-950/20 border border-indigo-500/10 rounded-xl p-3 text-xs text-slate-300">
-                    Vérifiez les informations détectées avant de les ajouter à la liste.
-                  </div>
-                  <div className="overflow-x-auto rounded-xl border border-slate-800">
-                    <table className="w-full text-left text-xs text-slate-300">
-                      <thead className="bg-slate-900 text-slate-400 uppercase font-bold">
-                        <tr>
-                          <th className="px-2 py-2">✓</th>
-                          <th className="px-2 py-2">Nom</th>
-                          <th className="px-2 py-2">Prénoms</th>
-                          <th className="px-2 py-2">Sexe</th>
-                          <th className="px-2 py-2">Naissance</th>
-                          <th className="px-2 py-2">Lieu</th>
-                          <th className="px-2 py-2">Téléphone</th>
-                        </tr>
-                      </thead>
-                      <tbody className="divide-y divide-slate-800/50">
-                        {enrolScanResults.map(r => (
-                          <tr key={r.tempId} className={r.include ? '' : 'opacity-50'}>
-                            <td className="px-2 py-2">
-                              <input type="checkbox" checked={r.include} onChange={(e) => updateEnrolScanResultField(r.tempId, 'include', e.target.checked)} className="w-4 h-4 accent-indigo-500" />
-                            </td>
-                            <td className="px-2 py-2">
-                              <input value={r.nom} onChange={(e) => updateEnrolScanResultField(r.tempId, 'nom', e.target.value.toUpperCase())} className="w-20 bg-slate-950 border border-slate-800 rounded px-1.5 py-1 text-white" />
-                            </td>
-                            <td className="px-2 py-2">
-                              <input value={r.prenoms} onChange={(e) => updateEnrolScanResultField(r.tempId, 'prenoms', e.target.value)} className="w-24 bg-slate-950 border border-slate-800 rounded px-1.5 py-1 text-white" />
-                            </td>
-                            <td className="px-2 py-2">
-                              <select value={r.sexe} onChange={(e) => updateEnrolScanResultField(r.tempId, 'sexe', e.target.value)} className="bg-slate-950 border border-slate-800 rounded px-1.5 py-1 text-white">
-                                <option value="M">M</option>
-                                <option value="F">F</option>
-                              </select>
-                            </td>
-                            <td className="px-2 py-2">
-                              <input value={r.dateNaissance} onChange={(e) => updateEnrolScanResultField(r.tempId, 'dateNaissance', e.target.value)} placeholder="JJ/MM/AAAA" className="w-24 bg-slate-950 border border-slate-800 rounded px-1.5 py-1 text-white" />
-                            </td>
-                            <td className="px-2 py-2">
-                              <input value={r.lieuNaissance} onChange={(e) => updateEnrolScanResultField(r.tempId, 'lieuNaissance', e.target.value)} className="w-24 bg-slate-950 border border-slate-800 rounded px-1.5 py-1 text-white" />
-                            </td>
-                            <td className="px-2 py-2">
-                              <input value={r.telephone} onChange={(e) => updateEnrolScanResultField(r.tempId, 'telephone', e.target.value)} className="w-24 bg-slate-950 border border-slate-800 rounded px-1.5 py-1 text-white" />
-                            </td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
-                  <div className="flex gap-3">
-                    <button onClick={resetEnrolScan} className="flex-1 bg-slate-900 hover:bg-slate-800 border border-slate-800 text-slate-300 text-sm font-semibold py-3 rounded-xl transition-colors">Annuler</button>
-                    <button onClick={handleApplyEnrolScanResults} className="flex-2 bg-gradient-to-r from-emerald-500 to-teal-500 text-slate-950 font-black text-sm py-3 px-6 rounded-xl shadow-lg shadow-emerald-500/10 hover:opacity-95 transition-all">Ajouter les élèves cochés</button>
-                  </div>
+                  {enrolScanImage && enrolScanStatus !== 'review' && (
+                    <div className="space-y-3">
+                      <div className="rounded-2xl overflow-hidden border border-slate-800 bg-slate-900">
+                        <img src={enrolScanImage.previewUrl} alt="Fiche d'enrôlement à analyser" className="w-full max-h-72 object-contain" />
+                      </div>
+                      {enrolScanStatus === 'error' && (
+                        <div className="bg-rose-950/40 border border-rose-800/60 rounded-xl p-3 text-xs text-rose-300 flex items-center gap-2">
+                          <AlertTriangle className="w-4 h-4 shrink-0" />
+                          {enrolScanErrorMsg}
+                        </div>
+                      )}
+                      <div className="flex gap-3">
+                        <button onClick={resetEnrolScan} disabled={enrolScanStatus === 'analyzing'} className="flex-1 bg-slate-900 hover:bg-slate-800 border border-slate-800 text-slate-300 text-sm font-semibold py-3 rounded-xl flex items-center justify-center gap-1.5 disabled:opacity-50 transition-colors">
+                          <RotateCcw className="w-4 h-4" />
+                          Changer de photo
+                        </button>
+                        <button onClick={handleAnalyzeEnrolScan} disabled={enrolScanStatus === 'analyzing'} className="flex-[2] bg-gradient-to-r from-indigo-600 to-purple-600 hover:opacity-95 text-white text-sm font-bold py-3 px-4 rounded-xl shadow-lg shadow-indigo-900/30 flex items-center justify-center gap-2 disabled:opacity-60 transition-all">
+                          {enrolScanStatus === 'analyzing' ? (
+                            <>
+                              <span className="w-4 h-4 border-2 border-white/40 border-t-white rounded-full animate-spin" />
+                              Analyse en cours...
+                            </>
+                          ) : (
+                            <>
+                              <Sparkles className="w-4 h-4" />
+                              Analyser avec l'IA
+                            </>
+                          )}
+                        </button>
+                      </div>
+                      {enrolScanStatus === 'analyzing' && enrolScanProgressMsg && (
+                        <p className="text-center text-xs text-slate-400 italic">{enrolScanProgressMsg}</p>
+                      )}
+                    </div>
+                  )}
+
+                  {enrolScanStatus === 'review' && (
+                    <div className="space-y-3">
+                      <div className="bg-indigo-950/20 border border-indigo-500/10 rounded-xl p-3 text-xs text-slate-300">
+                        Vérifiez les informations détectées avant de les ajouter à la liste.
+                      </div>
+                      <div className="overflow-x-auto rounded-xl border border-slate-800">
+                        <table className="w-full text-left text-xs text-slate-300">
+                          <thead className="bg-slate-900 text-slate-400 uppercase font-bold">
+                            <tr>
+                              <th className="px-2 py-2">✓</th>
+                              <th className="px-2 py-2">Nom</th>
+                              <th className="px-2 py-2">Prénoms</th>
+                              <th className="px-2 py-2">Sexe</th>
+                              <th className="px-2 py-2">Naissance</th>
+                              <th className="px-2 py-2">Lieu</th>
+                              <th className="px-2 py-2">Téléphone</th>
+                            </tr>
+                          </thead>
+                          <tbody className="divide-y divide-slate-800/50">
+                            {enrolScanResults.map(r => (
+                              <tr key={r.tempId} className={r.include ? '' : 'opacity-50'}>
+                                <td className="px-2 py-2">
+                                  <input type="checkbox" checked={r.include} onChange={(e) => updateEnrolScanResultField(r.tempId, 'include', e.target.checked)} className="w-4 h-4 accent-indigo-500" />
+                                </td>
+                                <td className="px-2 py-2">
+                                  <input value={r.nom} onChange={(e) => updateEnrolScanResultField(r.tempId, 'nom', e.target.value.toUpperCase())} className="w-20 bg-slate-950 border border-slate-800 rounded px-1.5 py-1 text-white" />
+                                </td>
+                                <td className="px-2 py-2">
+                                  <input value={r.prenoms} onChange={(e) => updateEnrolScanResultField(r.tempId, 'prenoms', e.target.value)} className="w-24 bg-slate-950 border border-slate-800 rounded px-1.5 py-1 text-white" />
+                                </td>
+                                <td className="px-2 py-2">
+                                  <select value={r.sexe} onChange={(e) => updateEnrolScanResultField(r.tempId, 'sexe', e.target.value)} className="bg-slate-950 border border-slate-800 rounded px-1.5 py-1 text-white">
+                                    <option value="M">M</option>
+                                    <option value="F">F</option>
+                                  </select>
+                                </td>
+                                <td className="px-2 py-2">
+                                  <input value={r.dateNaissance} onChange={(e) => updateEnrolScanResultField(r.tempId, 'dateNaissance', e.target.value)} placeholder="JJ/MM/AAAA" className="w-24 bg-slate-950 border border-slate-800 rounded px-1.5 py-1 text-white" />
+                                </td>
+                                <td className="px-2 py-2">
+                                  <input value={r.lieuNaissance} onChange={(e) => updateEnrolScanResultField(r.tempId, 'lieuNaissance', e.target.value)} className="w-24 bg-slate-950 border border-slate-800 rounded px-1.5 py-1 text-white" />
+                                </td>
+                                <td className="px-2 py-2">
+                                  <input value={r.telephone} onChange={(e) => updateEnrolScanResultField(r.tempId, 'telephone', e.target.value)} className="w-24 bg-slate-950 border border-slate-800 rounded px-1.5 py-1 text-white" />
+                                </td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                      <div className="flex gap-3">
+                        <button onClick={resetEnrolScan} className="flex-1 bg-slate-900 hover:bg-slate-800 border border-slate-800 text-slate-300 text-sm font-semibold py-3 rounded-xl transition-colors">Annuler</button>
+                        <button onClick={handleApplyEnrolScanResults} className="flex-[2] bg-gradient-to-r from-emerald-500 to-teal-500 text-slate-950 font-black text-sm py-3 px-4 rounded-xl shadow-lg shadow-emerald-500/10 hover:opacity-95 transition-all">Ajouter les élèves cochés</button>
+                      </div>
+                    </div>
+                  )}
                 </div>
               )}
             </div>
@@ -2428,7 +3032,7 @@ Si une information est illisible ou absente, mets une chaîne vide "" pour ce ch
                 <div>
                   <label className="block text-xs font-semibold text-slate-400 mb-1">Nom</label>
                   <div className="flex gap-1.5">
-                    <input type="text" value={enrolNom} onChange={(e) => setEnrolNom(e.target.value)} placeholder="Nom de famille" className="flex-1 bg-slate-900 border border-slate-800 rounded-xl px-3 py-2 text-slate-200 text-sm focus:outline-none focus:border-indigo-500" />
+                    <input type="text" value={enrolNom} onChange={(e) => setEnrolNom(e.target.value)} placeholder="Nom de famille" className="flex-1 min-w-0 bg-slate-900 border border-slate-800 rounded-xl px-3 py-2 text-slate-200 text-sm focus:outline-none focus:border-indigo-500" />
                     <button onClick={() => handleEnrolVoiceField('nom')} className={`p-2 rounded-xl transition-colors ${enrolIsListening && enrolVoiceField === 'nom' ? 'bg-rose-600 text-white animate-pulse' : 'bg-slate-800 hover:bg-slate-700 text-indigo-400'}`}>
                       <Mic className="w-4 h-4" />
                     </button>
@@ -2438,7 +3042,7 @@ Si une information est illisible ou absente, mets une chaîne vide "" pour ce ch
                 <div>
                   <label className="block text-xs font-semibold text-slate-400 mb-1">Prénom(s)</label>
                   <div className="flex gap-1.5">
-                    <input type="text" value={enrolPrenoms} onChange={(e) => setEnrolPrenoms(e.target.value)} placeholder="Prénom(s)" className="flex-1 bg-slate-900 border border-slate-800 rounded-xl px-3 py-2 text-slate-200 text-sm focus:outline-none focus:border-indigo-500" />
+                    <input type="text" value={enrolPrenoms} onChange={(e) => setEnrolPrenoms(e.target.value)} placeholder="Prénom(s)" className="flex-1 min-w-0 bg-slate-900 border border-slate-800 rounded-xl px-3 py-2 text-slate-200 text-sm focus:outline-none focus:border-indigo-500" />
                     <button onClick={() => handleEnrolVoiceField('prenoms')} className={`p-2 rounded-xl transition-colors ${enrolIsListening && enrolVoiceField === 'prenoms' ? 'bg-rose-600 text-white animate-pulse' : 'bg-slate-800 hover:bg-slate-700 text-indigo-400'}`}>
                       <Mic className="w-4 h-4" />
                     </button>
@@ -2472,7 +3076,7 @@ Si une information est illisible ou absente, mets une chaîne vide "" pour ce ch
                 <div>
                   <label className="block text-xs font-semibold text-slate-400 mb-1">Lieu de naissance</label>
                   <div className="flex gap-1.5">
-                    <input type="text" value={enrolLieuNaissance} onChange={(e) => setEnrolLieuNaissance(e.target.value)} placeholder="Ville / village" className="flex-1 bg-slate-900 border border-slate-800 rounded-xl px-3 py-2 text-slate-200 text-sm focus:outline-none focus:border-indigo-500" />
+                    <input type="text" value={enrolLieuNaissance} onChange={(e) => setEnrolLieuNaissance(e.target.value)} placeholder="Ville / village" className="flex-1 min-w-0 bg-slate-900 border border-slate-800 rounded-xl px-3 py-2 text-slate-200 text-sm focus:outline-none focus:border-indigo-500" />
                     <button onClick={() => handleEnrolVoiceField('lieuNaissance')} className={`p-2 rounded-xl transition-colors ${enrolIsListening && enrolVoiceField === 'lieuNaissance' ? 'bg-rose-600 text-white animate-pulse' : 'bg-slate-800 hover:bg-slate-700 text-indigo-400'}`}>
                       <Mic className="w-4 h-4" />
                     </button>
@@ -2482,7 +3086,7 @@ Si une information est illisible ou absente, mets une chaîne vide "" pour ce ch
                 <div className="sm:col-span-2">
                   <label className="block text-xs font-semibold text-slate-400 mb-1">Téléphone des parents</label>
                   <div className="flex gap-1.5">
-                    <input type="tel" value={enrolTelephone} onChange={(e) => setEnrolTelephone(e.target.value.replace(/\D/g, ''))} placeholder="Ex : 97000000" className="flex-1 bg-slate-900 border border-slate-800 rounded-xl px-3 py-2 text-slate-200 text-sm focus:outline-none focus:border-indigo-500" />
+                    <input type="tel" value={enrolTelephone} onChange={(e) => setEnrolTelephone(e.target.value.replace(/\D/g, ''))} placeholder="Ex : 97000000" className="flex-1 min-w-0 bg-slate-900 border border-slate-800 rounded-xl px-3 py-2 text-slate-200 text-sm focus:outline-none focus:border-indigo-500" />
                     <button onClick={() => handleEnrolVoiceField('telephone')} className={`p-2 rounded-xl transition-colors ${enrolIsListening && enrolVoiceField === 'telephone' ? 'bg-rose-600 text-white animate-pulse' : 'bg-slate-800 hover:bg-slate-700 text-indigo-400'}`}>
                       <Mic className="w-4 h-4" />
                     </button>
@@ -2497,7 +3101,7 @@ Si une information est illisible ou absente, mets une chaîne vide "" pour ce ch
             </div>
 
             <div className="bg-slate-950 border border-slate-800/80 rounded-3xl p-5 space-y-4">
-              <div className="flex items-center justify-between">
+              <div className="flex items-center justify-between gap-2">
                 <h4 className="font-bold text-white text-sm flex items-center gap-2">
                   <Users className="text-indigo-400 w-4 h-4" />
                   À enrôler ({enrolements.length})
@@ -2551,8 +3155,9 @@ Si une information est illisible ou absente, mets une chaîne vide "" pour ce ch
           </div>
         )}
 
+        {/* ---------------- PARAMÈTRES ---------------- */}
         {activeTab === 'parametres' && (
-          <div className="max-w-2xl mx-auto w-full space-y-6">
+          <div className="max-w-2xl mx-auto w-full space-y-5">
             <h3 className="font-bold text-xl text-white">Paramètres généraux</h3>
 
             <div className="bg-slate-950 border border-slate-800 rounded-2xl p-5 space-y-4">
@@ -2649,6 +3254,7 @@ Si une information est illisible ou absente, mets une chaîne vide "" pour ce ch
                     setNotes({});
                     setSelectedClassId('class-1');
                     setCurrentSaisieIndex(0);
+                    setVentilationStrategy('proportionnelle');
                     setUser({ nom: 'Enseignant Bénin', tel: '0197000000', statut_abonnement: 'demo', planId: null, plan: null, expireLe: null, etablissement: '', etablissementVerrouille: false, exportUsed: false });
                     triggerNotif("Application réinitialisée.");
                   }
@@ -2661,7 +3267,7 @@ Si une information est illisible ou absente, mets une chaîne vide "" pour ce ch
 
       </main>
 
-      <footer className="bg-slate-950 border-t border-slate-800/80 px-4 py-4 text-center text-xs text-slate-500">
+      <footer className="hidden sm:block bg-slate-950 border-t border-slate-800/80 px-4 py-4 text-center text-xs text-slate-500">
         <div className="max-w-6xl mx-auto flex flex-col sm:flex-row items-center justify-between gap-3">
           <p>© 2026 MastaNote AI+ - Spécial Primaire Bénin (CI à CM2). Tous droits réservés.</p>
           <div className="flex gap-4">
@@ -2670,18 +3276,39 @@ Si une information est illisible ou absente, mets une chaîne vide "" pour ce ch
         </div>
       </footer>
 
-      {/* --- ASSISTANT IA : bouton flottant --- */}
+      {/* ---------------- BARRE DE NAVIGATION MOBILE ---------------- */}
+      <nav className="sm:hidden fixed bottom-0 inset-x-0 z-40 bg-slate-950/95 backdrop-blur border-t border-slate-800 pb-[env(safe-area-inset-bottom)]">
+        <div className="grid grid-cols-5">
+          {NAV_ITEMS.map(item => {
+            const Icon = item.icon;
+            return (
+              <button
+                key={item.id}
+                onClick={() => goToTab(item.id)}
+                className={`flex flex-col items-center gap-0.5 py-2 text-[10px] font-semibold transition-colors ${
+                  activeTab === item.id ? 'text-indigo-400' : 'text-slate-500'
+                }`}
+              >
+                <Icon className="w-5 h-5" />
+                {item.short}
+              </button>
+            );
+          })}
+        </div>
+      </nav>
+
+      {/* ---------------- ASSISTANT IA : bouton flottant ---------------- */}
       {!assistantOpen && (
         <button
           onClick={() => setAssistantOpen(true)}
-          className="fixed bottom-5 right-5 z-40 bg-gradient-to-br from-indigo-600 to-purple-600 text-white p-4 rounded-full shadow-2xl shadow-indigo-900/40 hover:scale-105 transition-transform"
+          className="fixed bottom-20 sm:bottom-5 right-4 sm:right-5 z-40 bg-gradient-to-br from-indigo-600 to-purple-600 text-white p-3.5 sm:p-4 rounded-full shadow-2xl shadow-indigo-900/40 hover:scale-105 transition-transform"
           title="Assistant MastaNote"
         >
           <Bot className="w-6 h-6" />
         </button>
       )}
 
-      {/* --- ASSISTANT IA : fenêtre de discussion --- */}
+      {/* ---------------- ASSISTANT IA : fenêtre de discussion ---------------- */}
       {assistantOpen && (
         <div className="fixed inset-0 sm:inset-auto sm:bottom-5 sm:right-5 z-50 flex items-end sm:items-stretch justify-center sm:justify-end bg-black/40 sm:bg-transparent">
           <div className="bg-slate-950 border border-slate-800 w-full sm:w-[380px] h-[85vh] sm:h-[600px] sm:max-h-[80vh] rounded-t-3xl sm:rounded-3xl shadow-2xl flex flex-col overflow-hidden">
@@ -2706,10 +3333,10 @@ Si une information est illisible ou absente, mets une chaîne vide "" pour ce ch
                     <div className={`max-w-[85%] rounded-2xl px-3.5 py-2.5 text-sm ${
                       msg.role === 'user' ? 'bg-indigo-600 text-white' : 'bg-slate-800 text-slate-200'
                     }`}>
-                      <p className="whitespace-pre-wrap">{text}</p>
+                      <p className="whitespace-pre-wrap">{renderTextWithLinks(text)}</p>
                       {actionTab && (
                         <button
-                          onClick={() => { setActiveTab(actionTab); setAssistantOpen(false); }}
+                          onClick={() => { goToTab(actionTab); setAssistantOpen(false); }}
                           className="mt-2 bg-white/10 hover:bg-white/20 text-xs font-bold px-3 py-1.5 rounded-lg transition-colors"
                         >
                           Aller à cet écran →
@@ -2752,7 +3379,7 @@ Si une information est illisible ou absente, mets une chaîne vide "" pour ce ch
                 onKeyDown={(e) => { if (e.key === 'Enter') handleSendAssistantMessage(); }}
                 placeholder="Posez votre question..."
                 disabled={assistantLoading}
-                className="flex-1 bg-slate-900 border border-slate-800 rounded-xl px-3.5 py-2.5 text-slate-200 text-sm focus:outline-none focus:border-indigo-500 disabled:opacity-60"
+                className="flex-1 min-w-0 bg-slate-900 border border-slate-800 rounded-xl px-3.5 py-2.5 text-slate-200 text-sm focus:outline-none focus:border-indigo-500 disabled:opacity-60"
               />
               <button
                 onClick={() => handleSendAssistantMessage()}
