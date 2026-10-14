@@ -58,6 +58,9 @@ const VENTILATION_STRATEGIES = [
 
 const MAX_SCAN_FILES = 5;
 
+// Nombre d'images analysées en même temps (limite les rafales vers l'API gratuite de Google)
+const SCAN_CONCURRENCY = 2;
+
 // Rôle d'une image dans le registre : détection automatique ou choix manuel
 const SCAN_ROLES = [
   { id: 'auto', label: 'Auto-détection' },
@@ -255,7 +258,29 @@ const fileToCompressedImage = (file, maxSide = 1800, quality = 0.85) =>
     img.src = url;
   });
 
-// Appel du backend avec nouvelles tentatives automatiques (surcharge 503, réseau, timeout).
+// Limite le nombre de tâches simultanées : les suivantes attendent qu'une place se libère.
+const createGate = (max) => {
+  let active = 0;
+  const waiting = [];
+  return {
+    enter: () => new Promise(resolve => {
+      if (active < max) {
+        active++;
+        resolve();
+      } else {
+        waiting.push(resolve);
+      }
+    }),
+    leave: () => {
+      const next = waiting.shift();
+      if (next) next(); // la place est transmise à la tâche suivante
+      else active--;
+    }
+  };
+};
+
+// Appel du backend. Le serveur gère lui-même les surcharges (503) et les quotas (429) de Google ;
+// ici, on ne relance que les coupures réseau, les délais dépassés et les erreurs serveur sans code.
 const callScanApi = async (file, promptText) => {
   const MAX_ATTEMPTS = 3;
   let lastErr = new Error('Échec');
@@ -272,7 +297,8 @@ const callScanApi = async (file, promptText) => {
       if (!response.ok) {
         const errData = await response.json().catch(() => ({}));
         const err = new Error(errData.error || `Erreur serveur : ${response.status}`);
-        err.retryable = response.status >= 500;
+        err.code = errData.code || null; // 'QUOTA' ou 'OVERLOADED' : jamais relancé ici
+        err.retryable = !errData.code && response.status >= 500;
         throw err;
       }
       const data = await response.json();
@@ -1461,18 +1487,22 @@ export default function App() {
 
     setScanFiles(prev => prev.map(f => f.base64 ? { ...f, status: 'processing', message: '', empty: false } : f));
 
+    const gate = createGate(SCAN_CONCURRENCY);
     const outcomes = await Promise.all(analyzable.map(async (file) => {
+      await gate.enter();
       try {
         const promptText = buildRegistrePrompt({ role: file.role, mode: scanMode, targetMatieres, evaluationLabel });
         const rawText = await callScanApi(file, promptText);
         const items = parseJsonArrayLenient(rawText).filter(it => it && typeof it === 'object');
         const message = describeScanPage(items);
         setScanFiles(prev => prev.map(f => f.id === file.id ? { ...f, status: 'done', message, empty: items.length === 0 } : f));
+        gate.leave();
         return { ok: true, items };
       } catch (err) {
         console.error(err);
         setScanFiles(prev => prev.map(f => f.id === file.id ? { ...f, status: 'error', message: err?.message || 'Échec', empty: false } : f));
-        return { ok: false, items: [] };
+        gate.leave();
+        return { ok: false, items: [], code: err?.code || null };
       }
     }));
 
@@ -1481,7 +1511,15 @@ export default function App() {
 
     if (!outcomes.some(o => o.ok)) {
       setScanStatus('error');
-      setScanErrorMsg("Aucune image n'a pu être analysée. Vérifiez la netteté des photos et votre connexion, puis réessayez.");
+      const quotaReached = outcomes.some(o => o.code === 'QUOTA');
+      const overloaded = outcomes.some(o => o.code === 'OVERLOADED');
+      setScanErrorMsg(
+        quotaReached
+          ? "Le quota gratuit de lecture d'images est atteint pour le moment. Attendez quelques minutes (ou demain si le quota du jour est épuisé), puis réessayez avec moins d'images."
+          : overloaded
+            ? "Le service de lecture d'images est temporairement surchargé. Patientez une minute, puis réessayez."
+            : "Aucune image n'a pu être analysée. Vérifiez la netteté des photos et votre connexion, puis réessayez."
+      );
       return;
     }
 
@@ -1915,7 +1953,9 @@ Si une information est illisible ou absente, mets une chaîne vide "" pour ce ch
       console.error(err);
       setAssistantMessages(prev => [...prev, {
         role: 'assistant',
-        content: `Erreur : ${err?.message || "une erreur inconnue est survenue"}. Vérifiez votre connexion et réessayez dans quelques instants.`
+        content: err instanceof TypeError
+          ? "Impossible de joindre le serveur. Vérifiez votre connexion internet, puis réessayez."
+          : (err?.message || "Une erreur est survenue. Réessayez dans un instant.")
       }]);
     } finally {
       setAssistantLoading(false);
