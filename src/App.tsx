@@ -1,11 +1,14 @@
 import React, { useState, useEffect, useRef } from 'react';
 import * as XLSX from 'xlsx';
+import AuthProvider, { AuthScreen, useAuth } from './AuthGate';
+import { getAuthHeaders } from './firebase';
+import PhoneMockup from './PhoneMockup';
 import {
   BookOpen, Users, Plus, Download, Mic, MicOff, CheckCircle, CreditCard,
   TrendingUp, Award, AlertTriangle, FileSpreadsheet, Trash2, ChevronRight,
   ArrowLeft, Settings, Lock, Check, Camera, Sparkles, Image as ImageIcon,
   RotateCcw, Upload, Library, GraduationCap, Bot, Send,
-  Menu, X, MoreVertical, ChevronDown, Layers, Wand2, Paperclip
+  Menu, X, MoreVertical, ChevronDown, Layers, Wand2, Paperclip, LogOut
 } from 'lucide-react';
 
 // ==========================================================
@@ -290,7 +293,7 @@ const callScanApi = async (file, promptText) => {
     try {
       const response = await fetch(SCAN_API_URL, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: await getAuthHeaders(),
         body: JSON.stringify({ imageBase64: file.base64, mediaType: file.mediaType, promptText }),
         signal: controller.signal
       });
@@ -472,8 +475,30 @@ const renderTextWithLinks = (text) => {
 // ==========================================================
 // COMPOSANT PRINCIPAL
 // ==========================================================
+// La page d'accueil est publique ; le tableau de bord n'est accessible qu'après inscription / connexion
+// (voir AuthGate.tsx). L'application est remontée à chaque connexion ou déconnexion.
 export default function App() {
-  const [hasEnteredApp, setHasEnteredApp] = useState(false);
+  return (
+    <AuthProvider>
+      <MastaNoteApp />
+    </AuthProvider>
+  );
+}
+
+function MastaNoteApp() {
+  const { authUser, signOutUser } = useAuth();
+  // Connecté : tableau de bord directement. Visiteur : page d'accueil.
+  const [hasEnteredApp, setHasEnteredAppRaw] = useState(Boolean(authUser));
+  // Écran d'identification ouvert depuis l'accueil : 'login' | 'signup' | null
+  const [authView, setAuthView] = useState(null);
+  // Entrer dans l'application sans être connecté ouvre l'inscription (tous les boutons de l'accueil passent ici)
+  const setHasEnteredApp = (value) => {
+    if (value && !authUser) {
+      setAuthView('signup');
+      return;
+    }
+    setHasEnteredAppRaw(value);
+  };
   const [persisted] = useState(() => loadPersistedState());
 
   const [user, setUser] = useState(persisted?.user || {
@@ -1215,7 +1240,7 @@ export default function App() {
     try {
       const response = await fetch(LICENSE_API_URL, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: await getAuthHeaders(),
         body: JSON.stringify({ licenseKey: key })
       });
 
@@ -1925,7 +1950,7 @@ Si une information est illisible ou absente, mets une chaîne vide "" pour ce ch
 
       const response = await fetch(ASSISTANT_API_URL, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: await getAuthHeaders(),
         body: JSON.stringify({
           messages: payloadMessages,
           context: {
@@ -2000,9 +2025,40 @@ Si une information est illisible ou absente, mets une chaîne vide "" pour ce ch
   // ==========================================================
   // LANDING PAGE
   // ==========================================================
+  // Visiteur qui a choisi "Se connecter" ou "Créer un compte" depuis la page d'accueil
+  if (!authUser && authView) {
+    return <AuthScreen initialMode={authView} onBack={() => setAuthView(null)} />;
+  }
+
   if (!hasEnteredApp) {
     return (
       <div className="min-h-screen bg-slate-900 text-slate-100 font-sans overflow-x-hidden">
+
+        <div className="relative z-20 flex justify-end gap-2 px-4 pt-4">
+          {authUser ? (
+            <button
+              onClick={() => setHasEnteredApp(true)}
+              className="bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs px-4 py-2 rounded-xl transition-colors"
+            >
+              Ouvrir l'application
+            </button>
+          ) : (
+            <>
+              <button
+                onClick={() => setAuthView('login')}
+                className="bg-slate-800/80 hover:bg-slate-800 border border-slate-700 text-white font-bold text-xs px-4 py-2 rounded-xl transition-colors"
+              >
+                Se connecter
+              </button>
+              <button
+                onClick={() => setAuthView('signup')}
+                className="bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs px-4 py-2 rounded-xl transition-colors"
+              >
+                Créer un compte
+              </button>
+            </>
+          )}
+        </div>
 
         <section className="relative px-4 pt-10 pb-16 sm:pt-16 sm:pb-24 overflow-hidden">
           <div className="absolute top-0 left-1/2 -translate-x-1/2 w-[600px] h-[600px] bg-indigo-600/20 rounded-full blur-3xl pointer-events-none" />
@@ -2036,7 +2092,7 @@ Si une information est illisible ou absente, mets une chaîne vide "" pour ce ch
                 className="w-full sm:w-auto bg-gradient-to-r from-indigo-600 to-purple-600 hover:opacity-95 text-white font-bold text-base px-8 py-4 rounded-2xl shadow-2xl shadow-indigo-900/40 flex items-center justify-center gap-2 transition-all"
               >
                 <BookOpen className="w-5 h-5" />
-                Accéder à l'application
+                {authUser ? "Accéder à l'application" : 'Créer mon compte gratuit'}
               </button>
               <a
                 href={ABONNEMENT_PLANS.find(p => p.id === '5ans')?.chariowCheckoutUrl || BOUTIQUE_URL}
@@ -2050,6 +2106,10 @@ Si une information est illisible ou absente, mets une chaîne vide "" pour ce ch
             </div>
 
             <p className="text-xs text-slate-500 pt-2">Aucune carte bancaire requise pour commencer — testez gratuitement.</p>
+
+            <div className="pt-10 flex justify-center">
+              <PhoneMockup />
+            </div>
           </div>
         </section>
 
@@ -2137,7 +2197,7 @@ Si une information est illisible ou absente, mets une chaîne vide "" pour ce ch
               className="bg-gradient-to-r from-indigo-600 to-purple-600 hover:opacity-95 text-white font-bold text-base px-8 py-4 rounded-2xl shadow-xl shadow-indigo-900/30 inline-flex items-center gap-2 transition-all"
             >
               <BookOpen className="w-5 h-5" />
-              Lancer MastaNote AI+
+              {authUser ? 'Lancer MastaNote AI+' : 'Créer mon compte gratuit'}
             </button>
           </div>
         </section>
@@ -2262,6 +2322,7 @@ Si une information est illisible ou absente, mets une chaîne vide "" pour ce ch
               <div className="bg-slate-900 border border-slate-800 rounded-2xl p-4">
                 <p className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider">Compte</p>
                 <p className="text-sm font-bold text-white mt-0.5 truncate">{user.nom}</p>
+                {authUser?.email && <p className="text-[11px] text-slate-500 truncate">{authUser.email}</p>}
                 <p className="text-xs text-slate-400 mt-1">
                   {isTrial ? 'Mode essai gratuit' : `Premium — ${user.plan}`}
                 </p>
@@ -2294,6 +2355,10 @@ Si une information est illisible ou absente, mets une chaîne vide "" pour ce ch
                 <button onClick={() => goToTab('parametres')} className={drawerItemClass}>
                   <Settings className="w-4 h-4 text-slate-400" />
                   Paramètres
+                </button>
+                <button onClick={() => { setMenuOpen(false); signOutUser(); }} className={drawerItemClass}>
+                  <LogOut className="w-4 h-4 text-rose-400" />
+                  Se déconnecter
                 </button>
                 <button onClick={() => { setMenuOpen(false); setHasEnteredApp(false); }} className={drawerItemClass}>
                   <BookOpen className="w-4 h-4 text-slate-400" />
