@@ -32,8 +32,9 @@ export function formesVersSvg(layout, options = {}) {
     dimensions = `width="${px}" height="${Math.round((px * page.h) / page.w)}"`;
   }
 
+  // text-rendering="geometricPrecision" : évite les espaces parasites entre les lettres des petits textes
   const sortie = [
-    `<svg xmlns="http://www.w3.org/2000/svg" ${dimensions} viewBox="0 0 ${page.w} ${page.h}" font-family="Helvetica, Arial, sans-serif">`,
+    `<svg xmlns="http://www.w3.org/2000/svg" ${dimensions} viewBox="0 0 ${page.w} ${page.h}" font-family="Helvetica, Arial, sans-serif" text-rendering="geometricPrecision">`,
     `<rect x="0" y="0" width="${page.w}" height="${page.h}" fill="#ffffff"/>`
   ];
 
@@ -48,8 +49,10 @@ export function formesVersSvg(layout, options = {}) {
       );
     } else if (f.t === 'text') {
       const ancre = f.align === 'left' ? 'start' : f.align === 'right' ? 'end' : 'middle';
+      const rotation = f.rotate ? ` transform="rotate(${n(f.rotate)} ${n(f.x)} ${n(f.y)})"` : '';
+      const opacite = f.opacite !== undefined ? ` fill-opacity="${n(f.opacite)}"` : '';
       sortie.push(
-        `<text x="${n(f.x)}" y="${n(f.y)}" font-size="${n((f.size ?? 8) * PT_EN_MM)}" font-weight="${f.bold ? 700 : 400}" font-style="${f.italic ? 'italic' : 'normal'}" text-anchor="${ancre}" dominant-baseline="central" fill="${f.color ?? '#111111'}">${echapper(f.s)}</text>`
+        `<text x="${n(f.x)}" y="${n(f.y)}" font-size="${n((f.size ?? 8) * PT_EN_MM)}" font-weight="${f.bold ? 700 : 400}" font-style="${f.italic ? 'italic' : 'normal'}" text-anchor="${ancre}" dominant-baseline="central" fill="${f.color ?? '#111111'}"${opacite}${rotation}>${echapper(f.s)}</text>`
       );
     }
   }

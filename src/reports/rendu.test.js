@@ -11,10 +11,12 @@ import {
   construireFicheClasse,
   envelopper,
   fmtPctCourt,
+  libelleClasse,
   tableauFicheClasse
 } from './layout.js';
 import { formesVersSvg } from './svg.js';
 import { pdfDepuisJpeg } from './pdf.js';
+import { resultatExemple } from './exemple.js';
 
 const ELEVES = [
   { id: 'a', sexe: 'M', epreuves: { maths: { note: 12 }, dictee: { note: 9 } } },
@@ -95,6 +97,30 @@ test('tableauFicheClasse : en-têtes et lignes', () => {
   assert.equal(entete[0], 'Épreuve');
   for (const ligne of tableau.slice(4)) assert.equal(ligne.length, entete.length);
   assert.equal(tableau[4][0], LIGNES_FICHE_CLASSE[0].label);
+});
+
+// ---------- Libellé de classe, filigrane, exemple ----------
+test('libelleClasse : le niveau n\'est pas répété', () => {
+  assert.equal(libelleClasse({ nom: 'CM2 Émeraude', niveau: 'CM2' }), 'CM2 Émeraude');
+  assert.equal(libelleClasse({ nom: 'Émeraude', niveau: 'CM2' }), 'CM2 - Émeraude');
+  assert.equal(libelleClasse({ nom: '', niveau: 'CI' }), 'CI');
+});
+
+test('filigrane et rendu précis des petits textes', () => {
+  const svg = formesVersSvg(construireFicheClasse({ ...donnees, filigrane: 'EXEMPLE' }));
+  assert.ok(svg.includes('EXEMPLE'));
+  assert.ok(svg.includes('rotate(-25'));
+  assert.ok(svg.includes('geometricPrecision'));
+  assert.ok(!formesVersSvg(construireFicheClasse(donnees)).includes('EXEMPLE'));
+});
+
+test('exemple : données fictives cohérentes', () => {
+  const r = resultatExemple();
+  assert.equal(r.inscrits.T, 30);
+  assert.equal(r.inscrits.G + r.inscrits.F, 30);
+  assert.equal(r.composes.T, 28); // 2 absents
+  assert.ok(r.recus.T > 0 && r.recus.T <= r.composes.T);
+  assert.equal(r.sansSexe, 0);
 });
 
 // ---------- PDF ----------

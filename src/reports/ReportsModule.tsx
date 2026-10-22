@@ -5,6 +5,7 @@ import { EPREUVES_IDS, calculerClasse, verifierDonnees } from './metrics.js';
 import { construireFicheClasse, tableauFicheClasse } from './layout.js';
 import { formesVersSvg } from './svg.js';
 import { genererPdf, genererPng, genererXlsx, partagerImage, peutPartagerImage, telecharger } from './export.js';
+import { resultatExemple } from './exemple.js';
 
 // ==========================================================
 // MODULE « RAPPORTS D'ÉTAPE » — contrôle des données, résultats et fiche de classe téléchargeable
@@ -20,6 +21,10 @@ const STORAGE_KEY = 'mastanote-reports-v1';
 const META_KEY = 'mastanote-reports-meta-v1';
 const PERF_MIN_NOTE = 10; // même règle que l'application : pas de perfectionnement sous 10/20
 const PERF_MAX = 2;
+
+// Largeurs de l'aperçu : ajusté à l'écran, grand, très grand (défilement horizontal au-delà)
+const LARGEURS_APERCU: (string | number)[] = ['100%', 1000, 1500];
+const NOMS_ZOOM = ["Ajuster à l'écran", 'Agrandir', 'Très grand'];
 
 type Sexe = 'M' | 'F';
 type CelluleSaisie = { note?: string; perf?: string };
@@ -143,6 +148,8 @@ export default function ReportsModule({
   const [enCours, setEnCours] = useState('');
   const [erreurExport, setErreurExport] = useState('');
   const [partagePossible] = useState<boolean>(() => peutPartagerImage());
+  const [modeExemple, setModeExemple] = useState(false); // téléchargement d'une fiche fictive (filigrane EXEMPLE)
+  const [zoom, setZoom] = useState<number>(() => (typeof window !== 'undefined' && window.innerWidth < 640 ? 1 : 0));
 
   useEffect(() => {
     try {
@@ -185,6 +192,7 @@ export default function ReportsModule({
   );
   const layout = useMemo(() => (donneesRapport ? construireFicheClasse(donneesRapport) : null), [donneesRapport]);
   const svgApercu = useMemo(() => (layout ? formesVersSvg(layout, { responsive: true }) : ''), [layout]);
+  const exemple = useMemo(() => resultatExemple(), []);
 
   const bloque = !verification.ok || resultat.composes.T === 0;
 
@@ -241,15 +249,30 @@ export default function ReportsModule({
     `rapport_etape${etape}_${slug(classe.niveau)}_${slug(store.meta.annee)}.${extension}`;
 
   const lancerExport = async (format: 'pdf' | 'png' | 'xlsx' | 'partager') => {
-    if (!layout || !donneesRapport || bloque) return;
+    // Mode exemple : fiche fictive avec filigrane. Mode normal : données réelles, seulement si le contrôle est au vert.
+    const donnees = modeExemple
+      ? {
+          classe: { nom: 'Classe exemple', niveau: 'CM2' },
+          etape,
+          resultat: exemple,
+          meta: store.meta,
+          observations: 'Exemple : chiffres fictifs.',
+          filigrane: 'EXEMPLE'
+        }
+      : donneesRapport;
+    if (!donnees || (!modeExemple && bloque)) return;
+    const mise = modeExemple ? construireFicheClasse(donnees) : layout;
+    if (!mise) return;
+    const nom = (extension: string) => `${modeExemple ? 'exemple_' : ''}${nomFichier(extension)}`;
+
     setMenuOuvert(false);
     setErreurExport('');
     setEnCours(format);
     try {
-      if (format === 'pdf') telecharger(await genererPdf(layout), nomFichier('pdf'));
-      else if (format === 'png') telecharger(await genererPng(layout), nomFichier('png'));
-      else if (format === 'xlsx') telecharger(genererXlsx(tableauFicheClasse(donneesRapport)), nomFichier('xlsx'));
-      else await partagerImage(await genererPng(layout), nomFichier('png'), `Rapport d'étape ${etape}`);
+      if (format === 'pdf') telecharger(await genererPdf(mise), nom('pdf'));
+      else if (format === 'png') telecharger(await genererPng(mise), nom('png'));
+      else if (format === 'xlsx') telecharger(genererXlsx(tableauFicheClasse(donnees)), nom('xlsx'));
+      else await partagerImage(await genererPng(mise), nom('png'), `Rapport d'étape ${etape}`);
     } catch (err: any) {
       console.error(err);
       setErreurExport(err?.message || "L'export a échoué. Réessayez.");
@@ -405,7 +428,10 @@ export default function ReportsModule({
                     {/* Un seul bouton : il propose les formats disponibles */}
                     <div className="relative shrink-0">
                       <button
-                        onClick={() => setMenuOuvert((o) => !o)}
+                        onClick={() => {
+                          setModeExemple(false);
+                          setMenuOuvert((o) => !o);
+                        }}
                         disabled={bloque || enCours !== ''}
                         className="bg-gradient-to-r from-emerald-500 to-teal-500 text-slate-950 font-black text-xs px-4 py-2.5 rounded-xl flex items-center gap-1.5 shadow-lg shadow-emerald-500/10 disabled:opacity-40 transition-all"
                       >
@@ -421,6 +447,11 @@ export default function ReportsModule({
                         <>
                           <div className="fixed inset-0 z-20" onClick={() => setMenuOuvert(false)} />
                           <div className="absolute right-0 mt-2 w-64 z-30 bg-slate-950 border border-slate-800 rounded-xl shadow-2xl p-1.5">
+                            {modeExemple && (
+                              <p className="px-3 py-1.5 text-[10px] font-bold text-amber-300">
+                                Exemple : chiffres fictifs, filigrane « EXEMPLE »
+                              </p>
+                            )}
                             <button
                               onClick={() => lancerExport('pdf')}
                               className="w-full text-left px-3 py-2.5 rounded-lg hover:bg-slate-900 transition-colors"
@@ -467,6 +498,15 @@ export default function ReportsModule({
                         : 'Le téléchargement sera possible quand le contrôle des données ci-dessus sera au vert.'}
                     </p>
                   )}
+                  <button
+                    onClick={() => {
+                      setModeExemple(true);
+                      setMenuOuvert(true);
+                    }}
+                    className="text-[11px] font-bold text-indigo-300 underline hover:text-indigo-200"
+                  >
+                    Télécharger un exemple avec des chiffres fictifs
+                  </button>
                   {erreurExport && <p className="text-[11px] text-rose-300">{erreurExport}</p>}
 
                   {/* En-tête du rapport */}
@@ -510,9 +550,26 @@ export default function ReportsModule({
 
                   {/* Aperçu : exactement ce qui sera téléchargé */}
                   <div>
-                    <p className="text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1.5 px-1">Aperçu</p>
+                    <div className="flex items-center justify-between gap-2 mb-1.5 px-1">
+                      <p className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">Aperçu</p>
+                      <div className="flex gap-1">
+                        {NOMS_ZOOM.map((nom, i) => (
+                          <button
+                            key={nom}
+                            onClick={() => setZoom(i)}
+                            className={`text-[10px] font-bold px-2 py-1 rounded-md border transition-colors ${
+                              zoom === i
+                                ? 'bg-indigo-600 border-indigo-500 text-white'
+                                : 'bg-slate-900 border-slate-800 text-slate-400 hover:text-slate-200'
+                            }`}
+                          >
+                            {nom}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
                     <div className="overflow-x-auto rounded-lg border border-slate-700 bg-white">
-                      <div style={{ minWidth: 760 }} dangerouslySetInnerHTML={{ __html: svgApercu }} />
+                      <div style={{ width: LARGEURS_APERCU[zoom] }} dangerouslySetInnerHTML={{ __html: svgApercu }} />
                     </div>
                     <p className="text-[10px] text-slate-500 mt-1.5 px-1">
                       Faites défiler l'aperçu horizontalement sur téléphone. La zone de signature et le cachet restent à apposer sur la version imprimée.

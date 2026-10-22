@@ -46,6 +46,14 @@ const FOND_ENTETE = '#eef1f6';
 export const fmtEntier = (v) => (v === null || v === undefined ? '' : String(v));
 export const fmtPctCourt = (v) => (v === null || v === undefined ? '-' : `${String(v).replace('.', ',')}%`);
 
+const sansAccents = (s) => String(s ?? '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
+
+/** « CM2 » + « CM2 Émeraude » -> « CM2 Émeraude » (le niveau n'est pas répété) ; « CM2 » + « Émeraude » -> « CM2 - Émeraude ». */
+export function libelleClasse(classe) {
+  if (!classe.nom) return classe.niveau;
+  return sansAccents(classe.nom).includes(sansAccents(classe.niveau)) ? classe.nom : `${classe.niveau} - ${classe.nom}`;
+}
+
 /** Découpe un texte en lignes de maxCar caractères au plus ; au-delà de maxLignes, la dernière ligne finit par « ... ». */
 export function envelopper(texte, maxCar, maxLignes) {
   const mots = String(texte ?? '').split(/\s+/).filter(Boolean);
@@ -89,7 +97,7 @@ const renforcerFrancais = (resultat) => resultat.parGroupe?.['Français']?.nonAt
  * @param {{ classe: {nom: string, niveau: string}, etape: number, resultat: object, meta?: object, observations?: string }} donnees
  * @returns {{ page: {w: number, h: number}, formes: object[] }}
  */
-export function construireFicheClasse({ classe, etape, resultat, meta = {}, observations = '' }) {
+export function construireFicheClasse({ classe, etape, resultat, meta = {}, observations = '', filigrane = '' }) {
   const page = PAGE_A4_PAYSAGE;
   const formes = [];
   const texte = (x, y, s, o = {}) => formes.push({ t: 'text', x, y, s, size: 8, align: 'center', ...o });
@@ -102,7 +110,7 @@ export function construireFicheClasse({ classe, etape, resultat, meta = {}, obse
   texte(MARGE, 29.5, `ÉCOLE : ${meta.ecole || '..........'}`, { align: 'left', size: 7.5 });
   texte(page.w - MARGE, 14, `Année scolaire : ${meta.annee || '..........'}`, { align: 'right', size: 8 });
   texte(page.w / 2, 34, `RÉSULTATS DE L'ÉVALUATION D'ÉTAPE N°${etape}`, { size: 13, bold: true });
-  texte(page.w / 2, 40.5, `CLASSE : ${classe.niveau}${classe.nom ? ` - ${classe.nom}` : ''}`, { size: 9, bold: true });
+  texte(page.w / 2, 40.5, `CLASSE : ${libelleClasse(classe)}`, { size: 9, bold: true });
 
   // --- Géométrie du tableau ---
   const xGroupe = (i) => MARGE + COL_LABEL + i * 3 * COL_NUM;
@@ -182,11 +190,19 @@ export function construireFicheClasse({ classe, etape, resultat, meta = {}, obse
   texte(page.w - MARGE - 25, yPied, 'Le Directeur', { size: 8, bold: true });
   if (meta.directeur) texte(page.w - MARGE - 25, yPied + 22, meta.directeur, { size: 8 });
 
+  // Filigrane (fiche d'exemple) : grand mot en travers de la page, pour qu'elle ne soit jamais prise pour un vrai rapport
+  if (filigrane) {
+    formes.push({
+      t: 'text', x: page.w / 2, y: page.h / 2, s: filigrane, size: 80, bold: true,
+      color: '#c0392b', opacite: 0.18, rotate: -25, align: 'center'
+    });
+  }
+
   return { page, formes };
 }
 
 /** Le même rapport sous forme de tableau (lignes de cellules), pour l'export Excel. */
-export function tableauFicheClasse({ classe, etape, resultat, meta = {}, observations = '' }) {
+export function tableauFicheClasse({ classe, etape, resultat, meta = {}, observations = '', filigrane = '' }) {
   const entete = ['Épreuve'];
   for (const g of ['Inscrits', 'Ont composé', 'Maîtrise partielle (sous le seuil)', 'Seuil atteint', '% de réussite']) {
     for (const s of SEXES) entete.push(`${g} ${s}`);
@@ -194,7 +210,7 @@ export function tableauFicheClasse({ classe, etape, resultat, meta = {}, observa
   entete.push('À renforcer Maths', 'À renforcer Français', 'Observations');
 
   const lignes = [
-    [`RÉSULTATS DE L'ÉVALUATION D'ÉTAPE N°${etape}`],
+    [`RÉSULTATS DE L'ÉVALUATION D'ÉTAPE N°${etape}${filigrane ? ` [${filigrane}]` : ''}`],
     [`École : ${meta.ecole || ''}`, `Classe : ${classe.niveau} ${classe.nom || ''}`.trim(), `Année scolaire : ${meta.annee || ''}`],
     [],
     entete
