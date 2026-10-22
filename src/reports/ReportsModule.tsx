@@ -1,18 +1,23 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { AlertTriangle, ArrowLeft, CheckCircle, Info } from 'lucide-react';
+import { AlertTriangle, ArrowLeft, CheckCircle, ChevronDown, Download, Info, Share2 } from 'lucide-react';
 import { EPREUVES_RAPPORT, ETAPES, MODE_ARRONDI_DEFAUT, SEUIL_REUSSITE, evaluationPourEtape } from './config.js';
 import { EPREUVES_IDS, calculerClasse, verifierDonnees } from './metrics.js';
+import { construireFicheClasse, tableauFicheClasse } from './layout.js';
+import { formesVersSvg } from './svg.js';
+import { genererPdf, genererPng, genererXlsx, partagerImage, peutPartagerImage, telecharger } from './export.js';
 
 // ==========================================================
-// MODULE « RAPPORTS D'ÉTAPE » — écran de contrôle des données et résultats provisoires
+// MODULE « RAPPORTS D'ÉTAPE » — contrôle des données, résultats et fiche de classe téléchargeable
 //
 // Ce module LIT les classes et les notes de l'application (il ne les modifie JAMAIS).
-// Les informations qui manquaient à l'application (sexe, absences, Communication orale)
-// sont enregistrées dans un stockage SÉPARÉ, propre au module : mastanote-reports-v1.
-// Supprimer ce module et ce stockage ne change rien au reste de l'application.
+// Les informations qui manquaient à l'application (sexe, absences, Communication orale) et les champs
+// de l'en-tête du rapport sont enregistrés dans des stockages SÉPARÉS, propres au module :
+//   mastanote-reports-v1 (données de classe) et mastanote-reports-meta-v1 (en-tête et observations).
+// Supprimer ce module et ces stockages ne change rien au reste de l'application.
 // ==========================================================
 
 const STORAGE_KEY = 'mastanote-reports-v1';
+const META_KEY = 'mastanote-reports-meta-v1';
 const PERF_MIN_NOTE = 10; // même règle que l'application : pas de perfectionnement sous 10/20
 const PERF_MAX = 2;
 
@@ -24,6 +29,9 @@ type ClassExtra = {
   commOrale: Record<string, Record<string, CelluleSaisie>>; // évaluation -> élève -> note saisie
 };
 type Extras = Record<string, ClassExtra>;
+
+type Meta = { ecole: string; circonscription: string; annee: string; lieu: string; date: string; directeur: string };
+type MetaStore = { meta: Meta; observations: Record<string, string> };
 
 const emptyExtra = (): ClassExtra => ({ sexe: {}, absences: {}, commOrale: {} });
 
@@ -38,6 +46,31 @@ const loadExtras = (): Extras => {
   }
 };
 
+// Année scolaire proposée par défaut (modifiable) : à partir de septembre, la nouvelle année commence
+const anneeParDefaut = () => {
+  const d = new Date();
+  const y = d.getFullYear();
+  return d.getMonth() >= 8 ? `${y}-${y + 1}` : `${y - 1}-${y}`;
+};
+
+const metaVide = (): MetaStore => ({
+  meta: { ecole: '', circonscription: '', annee: anneeParDefaut(), lieu: '', date: new Date().toLocaleDateString('fr-FR'), directeur: '' },
+  observations: {}
+});
+
+const loadMeta = (): MetaStore => {
+  try {
+    const raw = localStorage.getItem(META_KEY);
+    const parsed = raw ? JSON.parse(raw) : null;
+    if (parsed && typeof parsed === 'object' && parsed.meta) {
+      return { meta: { ...metaVide().meta, ...parsed.meta }, observations: parsed.observations || {} };
+    }
+  } catch (err) {
+    console.error("Impossible de lire l'en-tête du rapport :", err);
+  }
+  return metaVide();
+};
+
 const parseNum = (s: unknown): number | null => {
   if (s === undefined || s === null || s === '') return null;
   const n = parseFloat(String(s).replace(',', '.'));
@@ -45,6 +78,15 @@ const parseNum = (s: unknown): number | null => {
 };
 
 const noteValide = (n: number | null): n is number => n !== null && n >= 0 && n <= 20;
+
+// Nom de fichier sans accents ni espaces
+const slug = (s: string) =>
+  String(s || '')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/[^a-zA-Z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+    .toLowerCase();
 
 // Transforme les données de l'application + celles du module en élèves « prêts pour le moteur de calcul ».
 function construireEleves(classe: any, notes: any, extras: Extras, evaluationId: string) {
@@ -94,8 +136,13 @@ export default function ReportsModule({
   onClose: () => void;
 }) {
   const [extras, setExtras] = useState<Extras>(loadExtras);
+  const [store, setStore] = useState<MetaStore>(loadMeta);
   const [classId, setClassId] = useState<string>(classes?.[0]?.id ?? '');
   const [etape, setEtape] = useState<number>(ETAPES[0].numero);
+  const [menuOuvert, setMenuOuvert] = useState(false);
+  const [enCours, setEnCours] = useState('');
+  const [erreurExport, setErreurExport] = useState('');
+  const [partagePossible] = useState<boolean>(() => peutPartagerImage());
 
   useEffect(() => {
     try {
@@ -104,6 +151,14 @@ export default function ReportsModule({
       console.error('Impossible de sauvegarder les données du module Rapports :', err);
     }
   }, [extras]);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem(META_KEY, JSON.stringify(store));
+    } catch (err) {
+      console.error("Impossible de sauvegarder l'en-tête du rapport :", err);
+    }
+  }, [store]);
 
   const classe = classes.find((c) => c.id === classId) ?? classes[0];
   const evaluationId = (evaluationPourEtape(etape) ?? 'sommative1') as string;
@@ -114,6 +169,24 @@ export default function ReportsModule({
   );
   const verification = useMemo(() => verifierDonnees(eleves), [eleves]);
   const resultat = useMemo(() => calculerClasse(eleves), [eleves]);
+
+  const cleObservations = `${classe?.id ?? ''}:${etape}`;
+  const observations = store.observations[cleObservations] ?? '';
+  const setMeta = (patch: Partial<Meta>) => setStore((s) => ({ ...s, meta: { ...s.meta, ...patch } }));
+  const setObservations = (v: string) =>
+    setStore((s) => ({ ...s, observations: { ...s.observations, [cleObservations]: v } }));
+
+  const donneesRapport = useMemo(
+    () =>
+      classe
+        ? { classe: { nom: classe.nom, niveau: classe.niveau }, etape, resultat, meta: store.meta, observations }
+        : null,
+    [classe, etape, resultat, store.meta, observations]
+  );
+  const layout = useMemo(() => (donneesRapport ? construireFicheClasse(donneesRapport) : null), [donneesRapport]);
+  const svgApercu = useMemo(() => (layout ? formesVersSvg(layout, { responsive: true }) : ''), [layout]);
+
+  const bloque = !verification.ok || resultat.composes.T === 0;
 
   const nomEleve = (id: string) => {
     const e = classe?.eleves.find((x: any) => x.id === id);
@@ -163,9 +236,34 @@ export default function ReportsModule({
     });
   };
 
+  // --- Téléchargement ---
+  const nomFichier = (extension: string) =>
+    `rapport_etape${etape}_${slug(classe.niveau)}_${slug(store.meta.annee)}.${extension}`;
+
+  const lancerExport = async (format: 'pdf' | 'png' | 'xlsx' | 'partager') => {
+    if (!layout || !donneesRapport || bloque) return;
+    setMenuOuvert(false);
+    setErreurExport('');
+    setEnCours(format);
+    try {
+      if (format === 'pdf') telecharger(await genererPdf(layout), nomFichier('pdf'));
+      else if (format === 'png') telecharger(await genererPng(layout), nomFichier('png'));
+      else if (format === 'xlsx') telecharger(genererXlsx(tableauFicheClasse(donneesRapport)), nomFichier('xlsx'));
+      else await partagerImage(await genererPng(layout), nomFichier('png'), `Rapport d'étape ${etape}`);
+    } catch (err: any) {
+      console.error(err);
+      setErreurExport(err?.message || "L'export a échoué. Réessayez.");
+    } finally {
+      setEnCours('');
+    }
+  };
+
   const sansNote = parType('aucune-note');
   const sansSexe = parType('sexe-manquant');
   const notesManquantes = parType('note-manquante');
+
+  const champClasse =
+    'w-full bg-slate-900 border border-slate-800 text-slate-200 text-sm rounded-xl px-3 py-2 focus:outline-none focus:border-indigo-500';
 
   return (
     <div className="fixed inset-0 z-[48] bg-slate-900 text-slate-100 font-sans overflow-y-auto">
@@ -180,7 +278,7 @@ export default function ReportsModule({
           </button>
           <div className="min-w-0">
             <h1 className="font-bold text-lg tracking-tight text-white">Rapports d'étape</h1>
-            <p className="text-[11px] text-slate-400">Contrôle des données et résultats provisoires</p>
+            <p className="text-[11px] text-slate-400">Contrôle des données, résultats et fiche de classe</p>
           </div>
         </div>
       </header>
@@ -196,8 +294,8 @@ export default function ReportsModule({
               <Info className="w-4 h-4 text-indigo-400 shrink-0 mt-px" />
               <p>
                 Ce module <strong className="text-white">lit</strong> vos classes et vos notes sans jamais les modifier.
-                Le sexe, les absences et la Communication orale que vous renseignez ici sont enregistrés à part,
-                uniquement pour les rapports. Le calcul suit vos règles : seuil de {SEUIL_REUSSITE}/20, coefficient 1,
+                Le sexe, les absences, la Communication orale et l'en-tête du rapport sont enregistrés à part. Le calcul suit vos règles :
+                seuil de {SEUIL_REUSSITE}/20, coefficient 1,
                 {MODE_ARRONDI_DEFAUT === 'troncature' ? ' pourcentages tronqués à deux décimales' : ' pourcentages arrondis à deux décimales'}.
               </p>
             </div>
@@ -247,13 +345,13 @@ export default function ReportsModule({
                   {verification.ok ? (
                     <div className="bg-emerald-950/40 border border-emerald-800/60 rounded-xl p-3 text-xs text-emerald-300 flex items-start gap-2">
                       <CheckCircle className="w-4 h-4 shrink-0 mt-px" />
-                      <span>Données complètes : les résultats ci-dessous sont fiables. La génération du rapport (PDF, image, Excel) arrive au prochain lot.</span>
+                      <span>Données complètes : les résultats ci-dessous sont fiables et le rapport peut être téléchargé.</span>
                     </div>
                   ) : (
                     <div className="bg-amber-950/40 border border-amber-800/60 rounded-xl p-3 text-xs text-amber-200 flex items-start gap-2">
                       <AlertTriangle className="w-4 h-4 shrink-0 mt-px" />
                       <span>
-                        Données incomplètes : les résultats ci-dessous sont <strong>provisoires</strong>. Un rapport ne pourra être généré
+                        Données incomplètes : les résultats ci-dessous sont <strong>provisoires</strong>. Le rapport ne pourra être téléchargé
                         qu'une fois les points suivants corrigés.
                       </span>
                     </div>
@@ -294,7 +392,135 @@ export default function ReportsModule({
                   )}
                 </section>
 
-                {/* ---------------- RÉSULTATS PROVISOIRES ---------------- */}
+                {/* ---------------- RAPPORT : FICHE DE CLASSE ---------------- */}
+                <section className="bg-slate-950 border border-slate-800 rounded-2xl p-4 space-y-4">
+                  <div className="flex items-start justify-between gap-3">
+                    <div>
+                      <h2 className="font-bold text-white text-sm">Rapport — fiche de classe</h2>
+                      <p className="text-[11px] text-slate-400 mt-0.5">
+                        Résultats de l'évaluation d'étape n°{etape}, prêts à imprimer, signer et transmettre.
+                      </p>
+                    </div>
+
+                    {/* Un seul bouton : il propose les formats disponibles */}
+                    <div className="relative shrink-0">
+                      <button
+                        onClick={() => setMenuOuvert((o) => !o)}
+                        disabled={bloque || enCours !== ''}
+                        className="bg-gradient-to-r from-emerald-500 to-teal-500 text-slate-950 font-black text-xs px-4 py-2.5 rounded-xl flex items-center gap-1.5 shadow-lg shadow-emerald-500/10 disabled:opacity-40 transition-all"
+                      >
+                        {enCours ? (
+                          <span className="w-3.5 h-3.5 border-2 border-slate-950/30 border-t-slate-950 rounded-full animate-spin" />
+                        ) : (
+                          <Download className="w-3.5 h-3.5" />
+                        )}
+                        Télécharger
+                        <ChevronDown className="w-3.5 h-3.5" />
+                      </button>
+                      {menuOuvert && (
+                        <>
+                          <div className="fixed inset-0 z-20" onClick={() => setMenuOuvert(false)} />
+                          <div className="absolute right-0 mt-2 w-64 z-30 bg-slate-950 border border-slate-800 rounded-xl shadow-2xl p-1.5">
+                            <button
+                              onClick={() => lancerExport('pdf')}
+                              className="w-full text-left px-3 py-2.5 rounded-lg hover:bg-slate-900 transition-colors"
+                            >
+                              <span className="block text-xs font-bold text-white">PDF</span>
+                              <span className="block text-[10px] text-slate-400">Prêt à imprimer et à signer</span>
+                            </button>
+                            <button
+                              onClick={() => lancerExport('png')}
+                              className="w-full text-left px-3 py-2.5 rounded-lg hover:bg-slate-900 transition-colors"
+                            >
+                              <span className="block text-xs font-bold text-white">Image (PNG)</span>
+                              <span className="block text-[10px] text-slate-400">Pour WhatsApp ou une impression rapide</span>
+                            </button>
+                            <button
+                              onClick={() => lancerExport('xlsx')}
+                              className="w-full text-left px-3 py-2.5 rounded-lg hover:bg-slate-900 transition-colors"
+                            >
+                              <span className="block text-xs font-bold text-white">Excel (.xlsx)</span>
+                              <span className="block text-[10px] text-slate-400">Pour remonter les chiffres au RUP</span>
+                            </button>
+                            {partagePossible && (
+                              <button
+                                onClick={() => lancerExport('partager')}
+                                className="w-full text-left px-3 py-2.5 rounded-lg hover:bg-slate-900 transition-colors flex items-center gap-2"
+                              >
+                                <Share2 className="w-3.5 h-3.5 text-indigo-400 shrink-0" />
+                                <span>
+                                  <span className="block text-xs font-bold text-white">Partager l'image…</span>
+                                  <span className="block text-[10px] text-slate-400">WhatsApp, e-mail, etc.</span>
+                                </span>
+                              </button>
+                            )}
+                          </div>
+                        </>
+                      )}
+                    </div>
+                  </div>
+
+                  {bloque && (
+                    <p className="text-[11px] text-amber-300">
+                      {resultat.composes.T === 0
+                        ? "Aucun élève n'a composé à cette étape : rien à rapporter."
+                        : 'Le téléchargement sera possible quand le contrôle des données ci-dessus sera au vert.'}
+                    </p>
+                  )}
+                  {erreurExport && <p className="text-[11px] text-rose-300">{erreurExport}</p>}
+
+                  {/* En-tête du rapport */}
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <div>
+                      <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1 px-1">École</label>
+                      <input className={champClasse} value={store.meta.ecole} onChange={(e) => setMeta({ ecole: e.target.value })} placeholder="Ex : EPP Tchankada" />
+                    </div>
+                    <div>
+                      <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1 px-1">Circonscription scolaire</label>
+                      <input className={champClasse} value={store.meta.circonscription} onChange={(e) => setMeta({ circonscription: e.target.value })} placeholder="Ex : Toviklin" />
+                    </div>
+                    <div>
+                      <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1 px-1">Année scolaire</label>
+                      <input className={champClasse} value={store.meta.annee} onChange={(e) => setMeta({ annee: e.target.value })} />
+                    </div>
+                    <div>
+                      <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1 px-1">Nom du directeur (facultatif)</label>
+                      <input className={champClasse} value={store.meta.directeur} onChange={(e) => setMeta({ directeur: e.target.value })} />
+                    </div>
+                    <div>
+                      <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1 px-1">Fait à</label>
+                      <input className={champClasse} value={store.meta.lieu} onChange={(e) => setMeta({ lieu: e.target.value })} />
+                    </div>
+                    <div>
+                      <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1 px-1">Le</label>
+                      <input className={champClasse} value={store.meta.date} onChange={(e) => setMeta({ date: e.target.value })} placeholder="JJ/MM/AAAA" />
+                    </div>
+                  </div>
+                  <div>
+                    <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1 px-1">
+                      Observations (colonne OBS de cette classe et de cette étape)
+                    </label>
+                    <textarea
+                      className={`${champClasse} min-h-[72px]`}
+                      value={observations}
+                      onChange={(e) => setObservations(e.target.value)}
+                      placeholder="Remarques pédagogiques, appréciation globale..."
+                    />
+                  </div>
+
+                  {/* Aperçu : exactement ce qui sera téléchargé */}
+                  <div>
+                    <p className="text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1.5 px-1">Aperçu</p>
+                    <div className="overflow-x-auto rounded-lg border border-slate-700 bg-white">
+                      <div style={{ minWidth: 760 }} dangerouslySetInnerHTML={{ __html: svgApercu }} />
+                    </div>
+                    <p className="text-[10px] text-slate-500 mt-1.5 px-1">
+                      Faites défiler l'aperçu horizontalement sur téléphone. La zone de signature et le cachet restent à apposer sur la version imprimée.
+                    </p>
+                  </div>
+                </section>
+
+                {/* ---------------- RÉSULTATS ---------------- */}
                 <section className="bg-slate-950 border border-slate-800 rounded-2xl p-4 space-y-4">
                   <h2 className="font-bold text-white text-sm">
                     Résultats {verification.ok ? '' : 'provisoires '}— {classe.nom}, étape {etape}
@@ -366,7 +592,7 @@ export default function ReportsModule({
                     </table>
                   </div>
                   <p className="text-[10px] text-slate-500">
-                    « À renforcer » : élèves ayant composé l'épreuve sans atteindre {SEUIL_REUSSITE}/20. Les colonnes G et F détaillées seront dans le rapport.
+                    « À renforcer » : élèves ayant composé l'épreuve sans atteindre {SEUIL_REUSSITE}/20. Les colonnes G et F détaillées figurent dans le rapport.
                   </p>
                 </section>
 

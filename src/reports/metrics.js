@@ -97,6 +97,7 @@ const pourcentagesTriple = (num, den, mode) => ({
  *  - recus      : parmi les « ont composé », ceux dont la moyenne générale atteint le seuil
  *  - pourcentage: recus / composes
  *  - parEpreuve : pour chaque épreuve, ceux qui ont composé, ceux qui ont atteint le seuil, ceux qui sont à renforcer
+ *  - parGroupe  : même chose par groupe d'épreuves (ex. « Français » = moyenne de ses épreuves, coefficient 1)
  * Les élèves sans sexe renseigné comptent dans T seulement (signalés par sansSexe).
  */
 export function calculerClasse(eleves, options = {}) {
@@ -122,14 +123,61 @@ export function calculerClasse(eleves, options = {}) {
     };
   }
 
+  // Groupes d'épreuves : un élève compte s'il a au moins une note dans le groupe ;
+  // sa moyenne de groupe (coefficient 1) est comparée au seuil.
+  const parGroupe = {};
+  const groupes = [...new Set(EPREUVES_RAPPORT.map((e) => e.groupe))];
+  for (const groupe of groupes) {
+    const ids = EPREUVES_RAPPORT.filter((e) => e.groupe === groupe && epreuves.includes(e.id)).map((e) => e.id);
+    if (ids.length === 0) continue;
+    const concernes = presents
+      .map((x) => ({ eleve: x.eleve, valeurs: ids.filter((id) => id in x.ev.totaux).map((id) => x.ev.totaux[id]) }))
+      .filter((x) => x.valeurs.length > 0);
+    const compose = compter(concernes.map((x) => x.eleve));
+    const atteint = compter(
+      concernes
+        .filter((x) => {
+          const m = moyenne(x.valeurs, mode);
+          return m !== null && m >= seuil;
+        })
+        .map((x) => x.eleve)
+    );
+    parGroupe[groupe] = {
+      composes: compose,
+      atteint,
+      nonAtteint: soustraire(compose, atteint),
+      pourcentage: pourcentagesTriple(atteint, compose, mode)
+    };
+  }
+
   return {
     inscrits,
     composes,
     recus,
     pourcentage: pourcentagesTriple(recus, composes, mode),
     parEpreuve,
+    parGroupe,
     sansSexe: eleves.filter((e) => e.sexe !== 'M' && e.sexe !== 'F').length
   };
+}
+
+// Additionne les détails (par épreuve ou par groupe) de plusieurs classes, puis recalcule les pourcentages.
+function sommerDetails(resultats, cle, mode) {
+  const sortie = {};
+  for (const r of resultats) {
+    for (const [id, st] of Object.entries(r[cle] ?? {})) {
+      const courant = sortie[id] ?? { composes: zero(), atteint: zero(), nonAtteint: zero() };
+      sortie[id] = {
+        composes: additionner(courant.composes, st.composes),
+        atteint: additionner(courant.atteint, st.atteint),
+        nonAtteint: additionner(courant.nonAtteint, st.nonAtteint)
+      };
+    }
+  }
+  for (const st of Object.values(sortie)) {
+    st.pourcentage = pourcentagesTriple(st.atteint, st.composes, mode);
+  }
+  return sortie;
 }
 
 /**
@@ -144,27 +192,13 @@ export function consoliderClasses(resultats, options = {}) {
   const composes = somme('composes');
   const recus = somme('recus');
 
-  const parEpreuve = {};
-  for (const r of resultats) {
-    for (const [id, st] of Object.entries(r.parEpreuve ?? {})) {
-      const courant = parEpreuve[id] ?? { composes: zero(), atteint: zero(), nonAtteint: zero() };
-      parEpreuve[id] = {
-        composes: additionner(courant.composes, st.composes),
-        atteint: additionner(courant.atteint, st.atteint),
-        nonAtteint: additionner(courant.nonAtteint, st.nonAtteint)
-      };
-    }
-  }
-  for (const st of Object.values(parEpreuve)) {
-    st.pourcentage = pourcentagesTriple(st.atteint, st.composes, mode);
-  }
-
   return {
     inscrits,
     composes,
     recus,
     pourcentage: pourcentagesTriple(recus, composes, mode),
-    parEpreuve,
+    parEpreuve: sommerDetails(resultats, 'parEpreuve', mode),
+    parGroupe: sommerDetails(resultats, 'parGroupe', mode),
     sansSexe: resultats.reduce((acc, r) => acc + (r.sansSexe ?? 0), 0)
   };
 }
