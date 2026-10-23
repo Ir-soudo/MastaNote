@@ -119,18 +119,15 @@ export default function EcoleView({
 
   const dire = (id: string, ok: boolean, texte: string) => setMessages((m) => ({ ...m, [id]: { ok, texte } }));
 
-  // Code d'exemple (chiffres fictifs) pour essayer l'import sans attendre une vraie synthèse
-  const codeExemple = (entree: Entree) => {
-    const decalage = Math.max(0, NIVEAUX.indexOf(entree.niveau));
-    return versCode(
-      creerSynthese({
-        resultat: resultatExemple(decalage),
-        classe: { nom: `EXEMPLE ${entree.niveau} (chiffres fictifs)`, niveau: entree.niveau },
-        etape,
-        annee: ''
-      })
-    );
-  };
+  // Synthèse d'exemple (chiffres fictifs) pour essayer l'import sans attendre une vraie synthèse
+  const syntheseExemple = (entree: Entree) =>
+    creerSynthese({
+      resultat: resultatExemple(Math.max(0, NIVEAUX.indexOf(entree.niveau))),
+      classe: { nom: `EXEMPLE ${entree.niveau} (chiffres fictifs)`, niveau: entree.niveau },
+      etape,
+      annee: ''
+    });
+  const codeExemple = (entree: Entree) => versCode(syntheseExemple(entree));
 
   const importerTexte = (entree: Entree, texte: string) => {
     try {
@@ -176,6 +173,37 @@ export default function EcoleView({
   const consolidation = consoliderEcole(
     lignes.map((l) => ({ id: l.entree.id, niveau: l.entree.niveau, resultat: l.resultat }))
   );
+  // Essai rapide : remplit en un clic toutes les lignes vides ou incomplètes avec des chiffres fictifs
+  // (les lignes déjà complètes ne changent pas ; une ligne « classe de cet appareil » passe en « synthèse reçue »).
+  const remplirAvecExemples = () => {
+    const aRemplir = lignes.filter((l) => l.etat !== 'ok').map((l) => l.entree);
+    if (aRemplir.length === 0) {
+      alert("Toutes les lignes ont déjà leurs chiffres : rien à remplir pour l'étape " + etape + '.');
+      return;
+    }
+    if (!confirm(`Remplir ${aRemplir.length} ligne(s) vide(s) ou incomplète(s) avec des chiffres fictifs d'exemple pour l'étape ${etape} ?`)) return;
+    setStore((s) => {
+      const ids = new Set(aRemplir.map((e) => e.id));
+      const syntheses = { ...s.syntheses };
+      for (const e of aRemplir) syntheses[e.id] = { ...(syntheses[e.id] || {}), [etape]: syntheseExemple(e) };
+      return { ...s, entrees: s.entrees.map((e) => (ids.has(e.id) ? { ...e, source: 'importee' as const } : e)), syntheses };
+    });
+  };
+
+  // Retire toutes les synthèses d'exemple (toutes les étapes) pour repartir sur de vrais chiffres
+  const effacerExemples = () => {
+    if (!confirm("Effacer toutes les synthèses d'exemple (toutes les étapes) ?")) return;
+    setStore((s) => {
+      const syntheses: Record<string, Record<string, any>> = {};
+      for (const [id, parEtape] of Object.entries(s.syntheses)) {
+        const reste: Record<string, any> = {};
+        for (const [e, syn] of Object.entries(parEtape)) if (!estExemple(syn)) reste[e] = syn;
+        if (Object.keys(reste).length) syntheses[id] = reste;
+      }
+      return { ...s, syntheses };
+    });
+  };
+
   const provisoire = lignes.some((l) => l.etat === 'provisoire');
   const sansDonnees = consolidation.parNiveau.filter((n) => !n.resultat).map((n) => n.niveau);
 
@@ -262,6 +290,22 @@ export default function EcoleView({
           Pour chaque classe, choisissez d'où viennent les chiffres : une classe de cet appareil, ou la synthèse envoyée par
           l'enseignant (code ou fichier, sans aucun nom d'élève). Vous pouvez ajouter, renommer ou retirer des classes.
         </p>
+
+        {/* Aide à l'essai : chiffres fictifs en un clic */}
+        <div className="flex flex-wrap items-center gap-2">
+          <button
+            onClick={remplirAvecExemples}
+            className="bg-slate-900 hover:bg-slate-800 border border-slate-800 text-indigo-300 font-bold text-[11px] px-3 py-2 rounded-lg transition-colors"
+          >
+            Remplir les lignes vides avec des exemples
+          </button>
+          <button
+            onClick={effacerExemples}
+            className="bg-slate-900 hover:bg-slate-800 border border-slate-800 text-slate-400 font-bold text-[11px] px-3 py-2 rounded-lg transition-colors"
+          >
+            Effacer les exemples
+          </button>
+        </div>
 
         {/* ---------------- LES CLASSES DE L'ÉCOLE ---------------- */}
         <section className="space-y-3">
