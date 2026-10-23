@@ -37,7 +37,10 @@ type ClassExtra = {
 };
 type Extras = Record<string, ClassExtra>;
 
-type Meta = { ecole: string; circonscription: string; annee: string; lieu: string; date: string; directeur: string };
+type Meta = {
+  ecole: string; circonscription: string; annee: string; lieu: string; date: string; directeur: string;
+  direction: string; region: string; bp: string; // en-tête de la synthèse niveau école
+};
 type MetaStore = { meta: Meta; observations: Record<string, string> };
 
 const emptyExtra = (): ClassExtra => ({ sexe: {}, absences: {}, commOrale: {} });
@@ -61,7 +64,10 @@ const anneeParDefaut = () => {
 };
 
 const metaVide = (): MetaStore => ({
-  meta: { ecole: '', circonscription: '', annee: anneeParDefaut(), lieu: '', date: new Date().toLocaleDateString('fr-FR'), directeur: '' },
+  meta: {
+    ecole: '', circonscription: '', annee: anneeParDefaut(), lieu: '', date: new Date().toLocaleDateString('fr-FR'), directeur: '',
+    direction: '', region: '', bp: ''
+  },
   observations: {}
 });
 
@@ -324,6 +330,8 @@ export default function ReportsModule({
         classes={classes}
         etape={etape}
         setEtape={setEtape}
+        meta={store.meta}
+        setMeta={setMeta}
         calculerPourClasse={calculerPourClasse}
         onBack={() => setVue('classe')}
         onClose={onClose}

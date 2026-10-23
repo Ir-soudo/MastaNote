@@ -4,12 +4,17 @@ import { ETAPES } from './config.js';
 import { NIVEAUX, consoliderEcole } from './ecole.js';
 import { creerSynthese, depuisCode, versCode, versResultat } from './synthese.js';
 import { resultatExemple } from './exemple.js';
+import { construireSyntheseEcole, construireSyntheseNiveaux, tableauSyntheseEcole, tableauSyntheseNiveaux } from './layoutEcole.js';
+import { formesVersSvg } from './svg.js';
+import { genererPdf, genererPng, genererXlsx, partagerImage, peutPartagerImage, telecharger } from './export.js';
+import TelechargerMenu, { type FormatExport } from './TelechargerMenu';
 
 // ==========================================================
 // ÉCRAN « TOUTE L'ÉCOLE »
 // Le directeur indique, pour chaque classe de son école (une par niveau par défaut, modifiable : classes
 // ajoutées, retirées, renommées), d'où viennent ses chiffres : une classe de CET appareil, ou une synthèse
-// reçue d'un collègue (code collé ou fichier). L'écran additionne le tout, niveau par niveau puis pour l'école.
+// reçue d'un collègue (code collé ou fichier). L'écran additionne le tout, niveau par niveau puis pour l'école,
+// et produit les fiches de l'école (aperçu, PDF, image, Excel).
 // Stockage séparé : mastanote-reports-ecole-v1. Rien n'est modifié ailleurs dans l'application.
 // ==========================================================
 
@@ -18,7 +23,20 @@ const KEY = 'mastanote-reports-ecole-v1';
 type Entree = { id: string; niveau: string; libelle: string; source: 'locale' | 'importee'; classId?: string };
 type Store = { entrees: Entree[]; syntheses: Record<string, Record<string, any>> }; // entrée -> étape -> synthèse
 
+const LARGEURS_APERCU: (string | number)[] = ['100%', 1000, 1500];
+const NOMS_ZOOM = ["Ajuster à l'écran", 'Agrandir', 'Très grand'];
+
 const identifiant = () => `e_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`;
+
+const slug = (s: string) =>
+  String(s || '')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/[^a-zA-Z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+    .toLowerCase();
+
+const estExemple = (s: any) => String(s?.c ?? '').startsWith('EXEMPLE');
 
 // Par défaut : une ligne par niveau ; si une classe de cet appareil a ce niveau, elle est proposée
 const storeParDefaut = (classes: any[]): Store => ({
@@ -52,6 +70,8 @@ export default function EcoleView({
   classes,
   etape,
   setEtape,
+  meta,
+  setMeta,
   calculerPourClasse,
   onBack,
   onClose
@@ -59,6 +79,8 @@ export default function EcoleView({
   classes: any[];
   etape: number;
   setEtape: (n: number) => void;
+  meta: any;
+  setMeta: (patch: any) => void;
   calculerPourClasse: (c: any) => { verification: { ok: boolean }; resultat: any };
   onBack: () => void;
   onClose: () => void;
@@ -67,6 +89,11 @@ export default function EcoleView({
   const [brouillons, setBrouillons] = useState<Record<string, string>>({});
   const [messages, setMessages] = useState<Record<string, { ok: boolean; texte: string }>>({});
   const [niveauAjout, setNiveauAjout] = useState<string>(NIVEAUX[0]);
+  const [fiche, setFiche] = useState<'niveaux' | 'ecole'>('niveaux');
+  const [zoom, setZoom] = useState<number>(() => (typeof window !== 'undefined' && window.innerWidth < 640 ? 1 : 0));
+  const [enCours, setEnCours] = useState(false);
+  const [erreurExport, setErreurExport] = useState('');
+  const [partagePossible] = useState<boolean>(() => peutPartagerImage());
 
   useEffect(() => {
     try {
@@ -115,12 +142,12 @@ export default function EcoleView({
       const avis: string[] = [`Synthèse importée : ${s.c || s.n}, étape ${s.e}.`];
       if (s.n !== entree.niveau) avis.push(`Attention : elle concerne le niveau ${s.n}, pas ${entree.niveau}.`);
       if (s.e !== etape) avis.push(`Elle concerne l'étape ${s.e} : choisissez cette étape pour la voir dans le total.`);
-      const estExemple = String(s.c).startsWith('EXEMPLE');
-      if (estExemple) avis.push('Chiffres fictifs : à remplacer par une vraie synthèse avant tout rapport.');
-      dire(entree.id, s.n === entree.niveau && s.e === etape && !estExemple, avis.join(' '));
+      const exemple = estExemple(s);
+      if (exemple) avis.push('Chiffres fictifs : à remplacer par une vraie synthèse avant tout rapport.');
+      dire(entree.id, s.n === entree.niveau && s.e === etape && !exemple, avis.join(' '));
       setBrouillons((b) => ({ ...b, [entree.id]: '' }));
     } catch (err: any) {
-      dire(entree.id, false, err?.message || "Import impossible.");
+      dire(entree.id, false, err?.message || 'Import impossible.');
     }
   };
 
@@ -152,8 +179,43 @@ export default function EcoleView({
   const provisoire = lignes.some((l) => l.etat === 'provisoire');
   const sansDonnees = consolidation.parNiveau.filter((n) => !n.resultat).map((n) => n.niveau);
 
+  // --- Fiches de l'école ---
+  const lignesIncompletes = lignes.filter((l) => l.etat !== 'ok');
+  const bloqueFiche = !consolidation.ecole || lignesIncompletes.length > 0;
+  const aExemple = lignes.some((l) => l.entree.source === 'importee' && estExemple(store.syntheses[l.entree.id]?.[etape]));
+  const filigrane = aExemple ? 'EXEMPLE' : '';
+  const donneesFiche = { consolidation, etape, meta, filigrane };
+  const layoutFiche = consolidation.ecole
+    ? fiche === 'niveaux'
+      ? construireSyntheseNiveaux(donneesFiche)
+      : construireSyntheseEcole(donneesFiche)
+    : null;
+  const svgApercu = layoutFiche ? formesVersSvg(layoutFiche, { responsive: true }) : '';
+
+  const lancerExport = async (format: FormatExport) => {
+    if (!layoutFiche || bloqueFiche) return;
+    setErreurExport('');
+    setEnCours(true);
+    const nom = (ext: string) =>
+      `${filigrane ? 'exemple_' : ''}${fiche === 'niveaux' ? 'synthese-niveaux' : 'synthese-ecole'}_etape${etape}_${slug(meta.annee)}.${ext}`;
+    try {
+      if (format === 'pdf') telecharger(await genererPdf(layoutFiche), nom('pdf'));
+      else if (format === 'png') telecharger(await genererPng(layoutFiche), nom('png'));
+      else if (format === 'xlsx') {
+        const tableau = fiche === 'niveaux' ? tableauSyntheseNiveaux(donneesFiche) : tableauSyntheseEcole(donneesFiche);
+        telecharger(genererXlsx(tableau), nom('xlsx'));
+      } else await partagerImage(await genererPng(layoutFiche), nom('png'), `Fiche d'école, étape ${etape}`);
+    } catch (err: any) {
+      console.error(err);
+      setErreurExport(err?.message || "L'export a échoué. Réessayez.");
+    } finally {
+      setEnCours(false);
+    }
+  };
+
   const champ =
     'bg-slate-900 border border-slate-800 text-slate-200 text-sm rounded-xl px-3 py-2 focus:outline-none focus:border-indigo-500';
+  const etiquette = 'block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1 px-1';
 
   return (
     <div className="fixed inset-0 z-[48] bg-slate-900 text-slate-100 font-sans overflow-y-auto">
@@ -311,10 +373,10 @@ export default function EcoleView({
                   {etat === 'ok' && !messages[entree.id] && (
                     <p
                       className={`text-[11px] ${
-                        String(store.syntheses[entree.id]?.[etape]?.c ?? '').startsWith('EXEMPLE') ? 'text-amber-300' : 'text-emerald-300'
+                        estExemple(store.syntheses[entree.id]?.[etape]) ? 'text-amber-300' : 'text-emerald-300'
                       }`}
                     >
-                      {String(store.syntheses[entree.id]?.[etape]?.c ?? '').startsWith('EXEMPLE')
+                      {estExemple(store.syntheses[entree.id]?.[etape])
                         ? "Chiffres fictifs d'exemple : à remplacer par une vraie synthèse avant tout rapport."
                         : `Synthèse présente pour l'étape ${etape}.`}
                     </p>
@@ -407,9 +469,109 @@ export default function EcoleView({
               Niveaux sans chiffres pour cette étape : {sansDonnees.join(', ')}. Le total « Ensemble » ne les compte pas.
             </p>
           )}
-          <p className="text-[10px] text-slate-500">
-            Les fiches d'école à télécharger (synthèse par niveau, champs de formation) arrivent au prochain lot : elles reprendront ces totaux.
-          </p>
+        </section>
+
+        {/* ---------------- FICHES DE L'ÉCOLE ---------------- */}
+        <section className="bg-slate-950 border border-slate-800 rounded-2xl p-4 space-y-4">
+          <div className="flex items-start justify-between gap-3">
+            <div>
+              <h2 className="font-bold text-white text-sm">Fiches de l'école</h2>
+              <p className="text-[11px] text-slate-400 mt-0.5">À imprimer, signer et transmettre à la circonscription.</p>
+            </div>
+            <TelechargerMenu
+              disabled={bloqueFiche}
+              enCours={enCours}
+              partagePossible={partagePossible}
+              note={aExemple ? "Chiffres d'exemple : la fiche sera marquée « EXEMPLE »" : undefined}
+              onExport={lancerExport}
+            />
+          </div>
+
+          {bloqueFiche && (
+            <p className="text-[11px] text-amber-300">
+              {!consolidation.ecole
+                ? "Aucune classe n'a encore de chiffres pour cette étape."
+                : `Le téléchargement sera possible quand chaque classe de la liste aura ses chiffres complets. À compléter ou à retirer : ${lignesIncompletes
+                    .map((l) => l.entree.libelle || l.entree.niveau)
+                    .join(', ')}.`}
+            </p>
+          )}
+          {erreurExport && <p className="text-[11px] text-rose-300">{erreurExport}</p>}
+
+          <div className="grid grid-cols-2 gap-1.5 bg-slate-900 p-1 rounded-xl border border-slate-800">
+            <button
+              onClick={() => setFiche('niveaux')}
+              className={`py-2 rounded-lg text-[11px] font-bold transition-colors ${
+                fiche === 'niveaux' ? 'bg-indigo-600 text-white' : 'text-slate-400 hover:text-slate-200'
+              }`}
+            >
+              Synthèse par niveau et champs de formation
+            </button>
+            <button
+              onClick={() => setFiche('ecole')}
+              className={`py-2 rounded-lg text-[11px] font-bold transition-colors ${
+                fiche === 'ecole' ? 'bg-indigo-600 text-white' : 'text-slate-400 hover:text-slate-200'
+              }`}
+            >
+              Synthèse niveau école
+            </button>
+          </div>
+
+          {/* En-tête commun aux fiches */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            {(
+              [
+                ['ecole', 'École', 'Ex : EPP Tchankada'],
+                ['circonscription', 'Circonscription scolaire', 'Ex : Toviklin'],
+                ['direction', 'Direction départementale', 'Ex : COUFFO'],
+                ['region', 'Région pédagogique n°', 'Ex : 11'],
+                ['bp', 'BP / adresse', 'Ex : 48 Dogbo'],
+                ['annee', 'Année scolaire', ''],
+                ['lieu', 'Fait à', ''],
+                ['date', 'Le', 'JJ/MM/AAAA'],
+                ['directeur', 'Nom du directeur (facultatif)', '']
+              ] as [string, string, string][]
+            ).map(([cle, libelle, exemple]) => (
+              <div key={cle}>
+                <label className={etiquette}>{libelle}</label>
+                <input
+                  className={`w-full ${champ}`}
+                  value={meta[cle] ?? ''}
+                  placeholder={exemple}
+                  onChange={(e) => setMeta({ [cle]: e.target.value })}
+                />
+              </div>
+            ))}
+          </div>
+
+          {layoutFiche && (
+            <div>
+              <div className="flex items-center justify-between gap-2 mb-1.5 px-1">
+                <p className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">Aperçu</p>
+                <div className="flex gap-1">
+                  {NOMS_ZOOM.map((nom, i) => (
+                    <button
+                      key={nom}
+                      onClick={() => setZoom(i)}
+                      className={`text-[10px] font-bold px-2 py-1 rounded-md border transition-colors ${
+                        zoom === i
+                          ? 'bg-indigo-600 border-indigo-500 text-white'
+                          : 'bg-slate-900 border-slate-800 text-slate-400 hover:text-slate-200'
+                      }`}
+                    >
+                      {nom}
+                    </button>
+                  ))}
+                </div>
+              </div>
+              <div className="overflow-x-auto rounded-lg border border-slate-700 bg-white">
+                <div style={{ width: LARGEURS_APERCU[zoom] }} dangerouslySetInnerHTML={{ __html: svgApercu }} />
+              </div>
+              <p className="text-[10px] text-slate-500 mt-1.5 px-1">
+                Le cachet et la signature sont à apposer sur la version imprimée. Aucun logo n'est ajouté.
+              </p>
+            </div>
+          )}
         </section>
       </main>
     </div>
