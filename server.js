@@ -1,12 +1,51 @@
 import express from 'express';
 import cors from 'cors';
+import { creerSecurite, reglesParDefaut } from './securite.js';
 
 const app = express();
+
+// Render place un relais devant le serveur : sans ceci, toutes les adresses IP paraîtraient identiques.
+app.set('trust proxy', 1);
 
 // Autorise votre frontend à appeler ce backend.
 // En production, remplacez '*' par l'URL exacte de votre frontend
 // (ex: 'https://mastanote-ai.onrender.com') pour plus de sécurité.
 app.use(cors({ origin: '*' }));
+
+// ------------------------------------------------------------------
+// SÉCURITÉ : identité des utilisateurs (jeton Firebase) et limites d'usage — voir securite.js
+// AUTH_MODE (variable Render) : off | observe (par défaut : compte les appels, ne refuse rien) | enforce (refuse)
+// Si la vérification ne peut pas démarrer (variable ou bibliothèque manquante), le serveur démarre quand même,
+// sans protection, et le dit dans les journaux.
+// ------------------------------------------------------------------
+const FIREBASE_PROJECT_ID = process.env.FIREBASE_PROJECT_ID;
+let verifierJeton = async () => ({ etat: 'absent' });
+let modeSecurite = 'off';
+if (!FIREBASE_PROJECT_ID) {
+  console.warn("[securite] FIREBASE_PROJECT_ID absente : vérification d'identité désactivée.");
+} else {
+  try {
+    const { creerVerificateurJeton } = await import('./jeton.js');
+    verifierJeton = creerVerificateurJeton({ projectId: FIREBASE_PROJECT_ID });
+    modeSecurite = process.env.AUTH_MODE;
+  } catch (err) {
+    console.error("[securite] Vérification d'identité désactivée (démarrage impossible) :", err.message);
+  }
+}
+const securite = creerSecurite({
+  mode: modeSecurite,
+  verifierJeton,
+  regles: reglesParDefaut(process.env),
+  globalMax: Number(process.env.RATE_GLOBAL_PAR_JOUR) || 0,
+  exigerEmailVerifie: process.env.AUTH_EXIGER_EMAIL_VERIFIE === 'true'
+});
+app.use('/api', securite.middleware);
+console.log(`[securite] mode : ${securite.mode}`);
+setInterval(() => securite.limiteur.purger(), 3600 * 1000).unref();
+setInterval(() => {
+  const resume = securite.resume();
+  if (Object.keys(resume).length) console.log('[securite] résumé', JSON.stringify(resume));
+}, 10 * 60 * 1000).unref();
 
 // Les images encodées en base64 peuvent facilement dépasser la limite
 // par défaut d'Express (100kb) — on l'augmente à 15 Mo.
