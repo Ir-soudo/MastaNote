@@ -5,12 +5,12 @@
 // ==========================================================
 import { EPREUVES_IDS, calculerClasse } from './metrics.js';
 
-export function construireElevesExemple() {
+export function construireElevesExemple(decalage = 0) {
   const eleves = [];
   for (let i = 0; i < 30; i++) {
     const epreuves = {};
     EPREUVES_IDS.forEach((id, j) => {
-      const note = ((i * 7 + j * 5 + 3) % 15) + 4; // de 4 à 18
+      const note = ((i * 7 + j * 5 + 3 + decalage) % 15) + 4; // de 4 à 18 (le décalage varie les chiffres d'un niveau à l'autre)
       epreuves[id] = { note, perf: note >= 10 ? ((i + j) % 3) * 0.5 : 0 };
     });
     eleves.push({
@@ -23,4 +23,4 @@ export function construireElevesExemple() {
   return eleves;
 }
 
-export const resultatExemple = () => calculerClasse(construireElevesExemple());
+export const resultatExemple = (decalage = 0) => calculerClasse(construireElevesExemple(decalage));

@@ -6,6 +6,8 @@ import { construireFicheClasse, tableauFicheClasse } from './layout.js';
 import { formesVersSvg } from './svg.js';
 import { genererPdf, genererPng, genererXlsx, partagerImage, peutPartagerImage, telecharger } from './export.js';
 import { resultatExemple } from './exemple.js';
+import EcoleView from './EcoleView';
+import { creerSynthese, nomFichierSynthese, versCode } from './synthese.js';
 
 // ==========================================================
 // MODULE « RAPPORTS D'ÉTAPE » — contrôle des données, résultats et fiche de classe téléchargeable
@@ -149,6 +151,8 @@ export default function ReportsModule({
   const [erreurExport, setErreurExport] = useState('');
   const [partagePossible] = useState<boolean>(() => peutPartagerImage());
   const [modeExemple, setModeExemple] = useState(false); // téléchargement d'une fiche fictive (filigrane EXEMPLE)
+  const [vue, setVue] = useState<'classe' | 'ecole'>('classe'); // « Ma classe » ou « Toute l'école »
+  const [messageSynthese, setMessageSynthese] = useState('');
   const [zoom, setZoom] = useState<number>(() => (typeof window !== 'undefined' && window.innerWidth < 640 ? 1 : 0));
 
   useEffect(() => {
@@ -193,6 +197,18 @@ export default function ReportsModule({
   const layout = useMemo(() => (donneesRapport ? construireFicheClasse(donneesRapport) : null), [donneesRapport]);
   const svgApercu = useMemo(() => (layout ? formesVersSvg(layout, { responsive: true }) : ''), [layout]);
   const exemple = useMemo(() => resultatExemple(), []);
+
+  // Synthèse à transmettre au directeur (code + nom de fichier) : seulement si les données sont complètes
+  const synthese = useMemo(() => {
+    if (!classe || !verification.ok || resultat.composes.T === 0) return null;
+    const s = creerSynthese({
+      resultat,
+      classe: { nom: classe.nom, niveau: classe.niveau },
+      etape,
+      annee: store.meta.annee
+    });
+    return { code: versCode(s), nom: nomFichierSynthese(s) };
+  }, [classe, verification, resultat, etape, store.meta.annee]);
 
   const bloque = !verification.ok || resultat.composes.T === 0;
 
@@ -281,6 +297,40 @@ export default function ReportsModule({
     }
   };
 
+  const copierCode = async () => {
+    if (!synthese) return;
+    try {
+      await navigator.clipboard.writeText(synthese.code);
+      setMessageSynthese('Code copié. Vous pouvez le coller dans WhatsApp.');
+    } catch (err) {
+      setMessageSynthese('Copie automatique impossible : sélectionnez le texte ci-dessus et copiez-le.');
+    }
+  };
+
+  const telechargerSynthese = () => {
+    if (!synthese) return;
+    telecharger(new Blob([synthese.code], { type: 'text/plain;charset=utf-8' }), synthese.nom);
+  };
+
+  // Résultat d'une classe de cet appareil pour l'étape choisie (utilisé par la vue « Toute l'école »)
+  const calculerPourClasse = (c: any) => {
+    const elevesClasse = construireEleves(c, notes, extras, evaluationId);
+    return { verification: verifierDonnees(elevesClasse), resultat: calculerClasse(elevesClasse) };
+  };
+
+  if (vue === 'ecole') {
+    return (
+      <EcoleView
+        classes={classes}
+        etape={etape}
+        setEtape={setEtape}
+        calculerPourClasse={calculerPourClasse}
+        onBack={() => setVue('classe')}
+        onClose={onClose}
+      />
+    );
+  }
+
   const sansNote = parType('aucune-note');
   const sansSexe = parType('sexe-manquant');
   const notesManquantes = parType('note-manquante');
@@ -307,6 +357,15 @@ export default function ReportsModule({
       </header>
 
       <main className="max-w-3xl mx-auto p-4 space-y-5 pb-16">
+        <div className="grid grid-cols-2 gap-1.5 bg-slate-900 p-1 rounded-2xl border border-slate-800">
+          <button className="py-2.5 rounded-xl text-xs font-bold bg-indigo-600 text-white">Ma classe</button>
+          <button
+            onClick={() => setVue('ecole')}
+            className="py-2.5 rounded-xl text-xs font-bold text-slate-400 hover:text-slate-200 transition-colors"
+          >
+            Toute l'école
+          </button>
+        </div>
         {!classe ? (
           <div className="text-center py-16 text-sm text-slate-400 border border-dashed border-slate-800 rounded-2xl">
             Aucune classe disponible. Créez d'abord une classe dans l'application.
@@ -575,6 +634,42 @@ export default function ReportsModule({
                       Faites défiler l'aperçu horizontalement sur téléphone. La zone de signature et le cachet restent à apposer sur la version imprimée.
                     </p>
                   </div>
+                </section>
+
+                {/* ---------------- SYNTHÈSE À TRANSMETTRE AU DIRECTEUR ---------------- */}
+                <section className="bg-slate-950 border border-slate-800 rounded-2xl p-4 space-y-3">
+                  <h2 className="font-bold text-white text-sm">Synthèse à transmettre au directeur</h2>
+                  <p className="text-[11px] text-slate-400">
+                    Un code court à envoyer par WhatsApp, ou un fichier : il ne contient que des effectifs et des totaux, aucun nom d'élève.
+                    Le directeur l'importe dans « Toute l'école ».
+                  </p>
+                  {!synthese ? (
+                    <p className="text-[11px] text-amber-300">Disponible quand le contrôle des données ci-dessus est au vert.</p>
+                  ) : (
+                    <>
+                      <textarea
+                        readOnly
+                        value={synthese.code}
+                        onFocus={(e) => e.target.select()}
+                        className="w-full bg-slate-900 border border-slate-800 text-slate-300 text-[11px] font-mono rounded-xl px-3 py-2 min-h-[72px] focus:outline-none"
+                      />
+                      <div className="flex flex-wrap gap-2">
+                        <button
+                          onClick={copierCode}
+                          className="bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-[11px] px-3.5 py-2 rounded-lg transition-colors"
+                        >
+                          Copier le code
+                        </button>
+                        <button
+                          onClick={telechargerSynthese}
+                          className="bg-slate-900 hover:bg-slate-800 border border-slate-800 text-slate-300 font-bold text-[11px] px-3.5 py-2 rounded-lg transition-colors"
+                        >
+                          Télécharger le fichier
+                        </button>
+                      </div>
+                      {messageSynthese && <p className="text-[11px] text-emerald-300">{messageSynthese}</p>}
+                    </>
+                  )}
                 </section>
 
                 {/* ---------------- RÉSULTATS ---------------- */}
