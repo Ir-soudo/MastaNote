@@ -65,7 +65,7 @@ const anneeParDefaut = () => {
 
 const metaVide = (): MetaStore => ({
   meta: {
-    ecole: '', circonscription: '', annee: anneeParDefaut(), lieu: '', date: new Date().toLocaleDateString('fr-FR'), directeur: '',
+    ecole: '', circonscription: '', annee: anneeParDefaut(), lieu: '', date: '', directeur: '',
     direction: '', region: '', bp: ''
   },
   observations: {}
@@ -196,7 +196,7 @@ export default function ReportsModule({
   const donneesRapport = useMemo(
     () =>
       classe
-        ? { classe: { nom: classe.nom, niveau: classe.niveau }, etape, resultat, meta: store.meta, observations }
+        ? { classe: { nom: classe.nom, niveau: classe.niveau }, etape, resultat, meta: { ...store.meta, date: store.meta.date || new Date().toLocaleDateString('fr-FR') }, observations }
         : null,
     [classe, etape, resultat, store.meta, observations]
   );
@@ -277,7 +277,7 @@ export default function ReportsModule({
           classe: { nom: 'Classe exemple', niveau: 'CM2' },
           etape,
           resultat: exemple,
-          meta: store.meta,
+          meta: { ...store.meta, date: store.meta.date || new Date().toLocaleDateString('fr-FR') },
           observations: 'Exemple : chiffres fictifs.',
           filigrane: 'EXEMPLE'
         }
@@ -600,7 +600,7 @@ export default function ReportsModule({
                     </div>
                     <div>
                       <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1 px-1">Le</label>
-                      <input className={champClasse} value={store.meta.date} onChange={(e) => setMeta({ date: e.target.value })} placeholder="JJ/MM/AAAA" />
+                      <input className={champClasse} value={store.meta.date} onChange={(e) => setMeta({ date: e.target.value })} placeholder="Vide = date du jour" />
                     </div>
                   </div>
                   <div>

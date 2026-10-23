@@ -212,7 +212,13 @@ export default function EcoleView({
   const bloqueFiche = !consolidation.ecole || lignesIncompletes.length > 0;
   const aExemple = lignes.some((l) => l.entree.source === 'importee' && estExemple(store.syntheses[l.entree.id]?.[etape]));
   const filigrane = aExemple ? 'EXEMPLE' : '';
-  const donneesFiche = { consolidation, etape, meta, filigrane };
+  // Date vide : on imprime la date du jour au moment du téléchargement (jamais une ancienne date figée)
+  const donneesFiche = {
+    consolidation,
+    etape,
+    meta: { ...meta, date: meta.date || new Date().toLocaleDateString('fr-FR') },
+    filigrane
+  };
   const layoutFiche = consolidation.ecole
     ? fiche === 'niveaux'
       ? construireSyntheseNiveaux(donneesFiche)
@@ -572,7 +578,7 @@ export default function EcoleView({
                 ['bp', 'BP / adresse', 'Ex : 48 Dogbo'],
                 ['annee', 'Année scolaire', ''],
                 ['lieu', 'Fait à', ''],
-                ['date', 'Le', 'JJ/MM/AAAA'],
+                ['date', 'Le', 'Vide = date du jour'],
                 ['directeur', 'Nom du directeur (facultatif)', '']
               ] as [string, string, string][]
             ).map(([cle, libelle, exemple]) => (
