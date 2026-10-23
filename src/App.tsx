@@ -3,6 +3,7 @@ import * as XLSX from 'xlsx';
 import AuthProvider, { AuthScreen, useAuth } from './AuthGate';
 import { getAuthHeaders } from './firebase';
 import PhoneMockup from './PhoneMockup';
+import ReportsModule from './reports/ReportsModule';
 import {
   BookOpen, Users, Plus, Download, Mic, MicOff, CheckCircle, CreditCard,
   TrendingUp, Award, AlertTriangle, FileSpreadsheet, Trash2, ChevronRight,
@@ -588,6 +589,7 @@ function MastaNoteApp() {
 
   // --- INTERFACE : menus, tiroirs, sections repliables ---
   const [menuOpen, setMenuOpen] = useState(false);
+  const [reportsOpen, setReportsOpen] = useState(false); // module Rapports d'étape (ouvert par la carte ou le menu)
   const [classMenuOpen, setClassMenuOpen] = useState(false);
   const [showDiag, setShowDiag] = useState(false);
   const [enrolScanOpen, setEnrolScanOpen] = useState(false);
@@ -2352,6 +2354,10 @@ Si une information est illisible ou absente, mets une chaîne vide "" pour ce ch
 
               <div className="space-y-1">
                 <p className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider px-1 mb-1">Application</p>
+                <button onClick={() => { setMenuOpen(false); setReportsOpen(true); }} className={drawerItemClass}>
+                  <FileSpreadsheet className="w-4 h-4 text-indigo-400" />
+                  Rapports d'étape
+                </button>
                 <button onClick={() => goToTab('parametres')} className={drawerItemClass}>
                   <Settings className="w-4 h-4 text-slate-400" />
                   Paramètres
@@ -2626,6 +2632,21 @@ Si une information est illisible ou absente, mets une chaîne vide "" pour ce ch
                 </select>
               </div>
             </div>
+
+            {/* Rapports d'étape : ouvre le module (lecture seule des classes et des notes) */}
+            <button
+              onClick={() => setReportsOpen(true)}
+              className="w-full text-left bg-gradient-to-r from-indigo-950 via-slate-900 to-slate-950 border border-indigo-500/20 rounded-2xl p-4 flex items-center gap-4 hover:border-indigo-500/40 transition-colors"
+            >
+              <div className="bg-indigo-500/10 border border-indigo-500/20 text-indigo-400 p-3 rounded-xl shrink-0">
+                <FileSpreadsheet className="w-5 h-5" />
+              </div>
+              <div className="min-w-0">
+                <p className="font-bold text-white text-sm">Rapports d'étape</p>
+                <p className="text-xs text-slate-400">Effectifs et taux de réussite calculés pour vous, prêts à présenter.</p>
+              </div>
+              <ChevronRight className="w-4 h-4 text-slate-500 ml-auto shrink-0" />
+            </button>
 
             <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
               <div className="bg-slate-950 border border-slate-800/80 p-4 rounded-2xl flex items-center gap-3 shadow-sm">
@@ -3778,6 +3799,11 @@ Si une information est illisible ou absente, mets une chaîne vide "" pour ce ch
           })}
         </div>
       </nav>
+
+      {/* ---------------- RAPPORTS D'ÉTAPE (module en lecture seule) ---------------- */}
+      {reportsOpen && (
+        <ReportsModule classes={classes} notes={notes} onClose={() => setReportsOpen(false)} />
+      )}
 
       {/* ---------------- ASSISTANT IA : bouton flottant ---------------- */}
       {!assistantOpen && (

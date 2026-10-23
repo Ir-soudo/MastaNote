@@ -101,6 +101,19 @@ test('calculerClasse : détail par épreuve (dont « à renforcer »)', () => {
   assert.deepEqual(r.parEpreuve.dictee.pourcentage, { G: 0, F: 50, T: 33.33 });
 });
 
+test('calculerClasse : groupe Français = moyenne des épreuves du groupe', () => {
+  const eleves = [
+    { id: 'a', sexe: 'M', epreuves: { dictee: { note: 12 }, expression_ecrite: { note: 6 } } }, // moyenne 9 : à renforcer
+    { id: 'b', sexe: 'F', epreuves: { dictee: { note: 8 }, expression_ecrite: { note: 14 } } }, // moyenne 11 : atteint
+    { id: 'c', sexe: 'F', absent: true, epreuves: { dictee: { note: 1 } } } // absent : ignoré
+  ];
+  const r = calculerClasse(eleves, { epreuves: ['dictee', 'expression_ecrite'] });
+  assert.deepEqual(r.parGroupe['Français'].composes, { G: 1, F: 1, T: 2 });
+  assert.deepEqual(r.parGroupe['Français'].atteint, { G: 0, F: 1, T: 1 });
+  assert.deepEqual(r.parGroupe['Français'].nonAtteint, { G: 1, F: 0, T: 1 });
+  assert.equal(r.parGroupe['Mathématique'], undefined);
+});
+
 // ---------- Consolidation de l'école : ligne « Ensemble » de la fiche ----------
 const niveau = (ig, if_, cg, cf, rg, rf) => ({
   inscrits: { G: ig, F: if_, T: ig + if_ },
