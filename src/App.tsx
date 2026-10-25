@@ -4,6 +4,7 @@ import AuthProvider, { AuthScreen, useAuth } from './AuthGate';
 import { getAuthHeaders } from './firebase';
 import PhoneMockup from './PhoneMockup';
 import ReportsModule from './reports/ReportsModule';
+import CloudBackupCard from './cloud/CloudBackupCard';
 import {
   BookOpen, Users, Plus, Download, Mic, MicOff, CheckCircle, CreditCard,
   TrendingUp, Award, AlertTriangle, FileSpreadsheet, Trash2, ChevronRight,
@@ -145,9 +146,22 @@ const STORAGE_KEY = 'mastanote-ai-state-v2';
 // UTILITAIRES (hors composant)
 // ==========================================================
 
-const loadPersistedState = () => {
+// Clé de stockage propre à chaque compte : les données d'un compte ne se mélangent plus à celles d'un autre sur le même appareil.
+const storageKeyFor = (uid) => (uid ? `${STORAGE_KEY}:${uid}` : STORAGE_KEY);
+
+const loadPersistedState = (uid) => {
   try {
-    const raw = localStorage.getItem(STORAGE_KEY);
+    const key = storageKeyFor(uid);
+    let raw = localStorage.getItem(key);
+    // Première connexion de ce compte après la mise à jour : il reprend les données déjà présentes sur l'appareil.
+    // La copie d'origine n'est jamais supprimée : aucune perte possible.
+    if (raw === null && uid) {
+      const legacy = localStorage.getItem(STORAGE_KEY);
+      if (legacy !== null) {
+        localStorage.setItem(key, legacy);
+        raw = legacy;
+      }
+    }
     return raw ? JSON.parse(raw) : null;
   } catch (err) {
     console.error("Impossible de lire les données sauvegardées :", err);
@@ -500,7 +514,7 @@ function MastaNoteApp() {
     }
     setHasEnteredAppRaw(value);
   };
-  const [persisted] = useState(() => loadPersistedState());
+  const [persisted] = useState(() => loadPersistedState(authUser?.uid));
 
   const [user, setUser] = useState(persisted?.user || {
     nom: 'Enseignant Bénin',
@@ -538,13 +552,13 @@ function MastaNoteApp() {
   useEffect(() => {
     const timer = setTimeout(() => {
       try {
-        localStorage.setItem(STORAGE_KEY, JSON.stringify({ user, classes, notes, ventilationStrategy }));
+        localStorage.setItem(storageKeyFor(authUser?.uid), JSON.stringify({ user, classes, notes, ventilationStrategy }));
       } catch (err) {
         console.error("Impossible de sauvegarder les données :", err);
       }
     }, 300);
     return () => clearTimeout(timer);
-  }, [user, classes, notes, ventilationStrategy]);
+  }, [user, classes, notes, ventilationStrategy, authUser?.uid]);
 
   // --- STABILISATION MOBILE : bloque le pinch-to-zoom iOS (gesturestart) ---
   useEffect(() => {
@@ -1855,6 +1869,21 @@ Si une information est illisible ou absente, mets une chaîne vide "" pour ce ch
     if (!confirm("Une fois verrouillé, le nom de l'établissement ne pourra plus être modifié sans passer par le support. Confirmer ?")) return;
     setUser(prev => ({ ...prev, etablissementVerrouille: true }));
     triggerNotif("Établissement verrouillé avec succès.", 'success');
+  };
+
+  // Restauration depuis le cloud : remplace les classes, notes et réglages de CET appareil
+  // (la confirmation est demandée dans la carte de sauvegarde, avant tout appel à cette fonction).
+  const restaurerDepuisLeCloud = (etat) => {
+    setClasses(
+      etat.classes.length > 0
+        ? etat.classes
+        : [{ id: 'class-1', nom: 'CM2 Émeraude', niveau: 'CM2', eleves: ELEVES_INITIAL_CM2 }]
+    );
+    setNotes(etat.notes);
+    setVentilationStrategy(etat.ventilationStrategy);
+    setSelectedClassId(etat.classes[0]?.id || 'class-1');
+    setCurrentSaisieIndex(0);
+    triggerNotif('Sauvegarde restaurée sur cet appareil.', 'success');
   };
 
   const handleOpenFiches = () => {
@@ -3663,6 +3692,13 @@ Si une information est illisible ou absente, mets une chaîne vide "" pour ce ch
           <div className="max-w-2xl mx-auto w-full space-y-5">
             <h3 className="font-bold text-xl text-white">Paramètres généraux</h3>
 
+            <CloudBackupCard
+              authUser={authUser}
+              getEtat={() => ({ classes, notes, ventilationStrategy })}
+              onRestore={restaurerDepuisLeCloud}
+              notify={triggerNotif}
+            />
+
             <div className="bg-slate-950 border border-slate-800 rounded-2xl p-5 space-y-4">
               <h4 className="font-bold text-slate-200 text-sm">Profil Enseignant</h4>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -3752,7 +3788,7 @@ Si une information est illisible ou absente, mets une chaîne vide "" pour ce ch
               <button
                 onClick={() => {
                   if (confirm("Voulez-vous vraiment réinitialiser l'application ? Cette action est irréversible.")) {
-                    localStorage.removeItem(STORAGE_KEY);
+                    localStorage.removeItem(storageKeyFor(authUser?.uid));
                     setClasses([{ id: 'class-1', nom: 'CM2 Émeraude', niveau: 'CM2', eleves: ELEVES_INITIAL_CM2 }]);
                     setNotes({});
                     setSelectedClassId('class-1');
