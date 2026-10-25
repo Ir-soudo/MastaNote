@@ -122,7 +122,7 @@ export default function EcoleView({
   // Synthèse d'exemple (chiffres fictifs) pour essayer l'import sans attendre une vraie synthèse
   const syntheseExemple = (entree: Entree) =>
     creerSynthese({
-      resultat: resultatExemple(Math.max(0, NIVEAUX.indexOf(entree.niveau))),
+      resultat: resultatExemple(Math.max(0, NIVEAUX.indexOf(entree.niveau)), entree.niveau),
       classe: { nom: `EXEMPLE ${entree.niveau} (chiffres fictifs)`, niveau: entree.niveau },
       etape,
       annee: ''

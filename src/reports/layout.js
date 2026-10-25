@@ -1,26 +1,31 @@
 // ==========================================================
 // MISE EN PAGE DE LA FICHE DE CLASSE (« Résultats de l'évaluation d'étape »)
-// Fonctions pures, sans dépendance. Le rapport est décrit UNE SEULE FOIS comme une liste de formes
-// (rectangles, textes, lignes) en millimètres ; l'aperçu, le PDF et l'image sont dessinés à partir de cette liste,
-// donc identiques entre eux.
+// Fonctions pures. Le rapport est décrit UNE SEULE FOIS comme une liste de formes (rectangles, textes, lignes)
+// en millimètres ; l'aperçu, le PDF et l'image sont dessinés à partir de cette liste, donc identiques entre eux.
+//
+// Conforme au canevas de synthèse : une ligne par épreuve évaluée dans le niveau (la ligne CO n'existe qu'en CI et CP),
+// une ligne ENSEMBLE pour la classe entière, et des cases « à renforcer » (Maths, Français) sur chaque ligne concernée.
 // ==========================================================
+import { EPREUVES_RAPPORT } from './config.js';
 
 export const PAGE_A4_PAYSAGE = { w: 297, h: 210 };
 
-// Lignes de la fiche, dans l'ordre lu sur la fiche de référence, avec l'épreuve MastaNote correspondante.
-// À corriger ici si l'ordre ou un libellé de la fiche officielle diffère.
+// Lignes de la fiche, dans l'ordre du canevas, avec l'épreuve MastaNote correspondante.
+// Seules les lignes dont l'épreuve a été calculée pour la classe sont dessinées.
 export const LIGNES_FICHE_CLASSE = [
   { label: 'CE', epreuve: 'comprehension' },
   { label: 'CO', epreuve: 'communication_orale' },
   { label: 'EE', epreuve: 'expression_ecrite' },
   { label: 'EST', epreuve: 'est' },
   { label: 'ES', epreuve: 'es' },
-  { label: 'EA/OR', epreuve: 'ea_oral' },
+  { label: 'EA/ORAL', epreuve: 'ea_oral' },
   { label: 'MATHS', epreuve: 'maths' },
-  { label: 'DICTÉE', epreuve: 'dictee' },
+  { label: 'DICTEE', epreuve: 'dictee' },
   { label: 'EA/DESSIN/COUTURE', epreuve: 'ea_dessin' },
   { label: 'EPS', epreuve: 'eps' }
 ];
+
+const GROUPE_FRANCAIS = 'Français';
 
 // Groupes de colonnes (chacun en G, F, T)
 const GROUPES = [
@@ -39,9 +44,10 @@ const COL_NUM = 11.5;
 const COL_RENF = 14;
 const HAUT_ENTETE = 20;
 const HAUT_SOUS_ENTETE = 6;
-const HAUT_LIGNE = 9;
+const HAUT_LIGNE = 8.5;
 const Y_TABLEAU = 46;
 const FOND_ENTETE = '#eef1f6';
+const FOND_ENSEMBLE = '#f6f7fa';
 
 export const fmtEntier = (v) => (v === null || v === undefined ? '' : String(v));
 export const fmtPctCourt = (v) => (v === null || v === undefined ? '-' : `${String(v).replace('.', ',')}%`);
@@ -77,7 +83,7 @@ export function envelopper(texte, maxCar, maxLignes) {
   return lignes;
 }
 
-// Les 5 groupes de chiffres d'une ligne (chacun { G, F, T })
+// Les 5 groupes de chiffres d'une ligne d'épreuve (chacun { G, F, T })
 function groupesDeLigne(resultat, epreuveId) {
   const st = resultat.parEpreuve[epreuveId];
   return {
@@ -89,12 +95,57 @@ function groupesDeLigne(resultat, epreuveId) {
   };
 }
 
-const renforcerMaths = (resultat) => resultat.parEpreuve?.maths?.nonAtteint?.T ?? 0;
-const renforcerFrancais = (resultat) => resultat.parGroupe?.['Français']?.nonAtteint?.T ?? 0;
+// La ligne ENSEMBLE : la classe entière (moyenne générale de chaque élève, comparée au seuil)
+function groupesEnsemble(resultat) {
+  const { inscrits, composes, recus } = resultat;
+  return {
+    inscrits,
+    composes,
+    partielle: { G: composes.G - recus.G, F: composes.F - recus.F, T: composes.T - recus.T },
+    minimale: recus,
+    pourcentage: resultat.pourcentage
+  };
+}
+
+// « À renforcer » : effectif d'élèves sous le seuil dans la discipline. Chaque ligne a sa case :
+// MATHS dans la colonne Maths, les épreuves de Français (CE, CO, EE, DICTEE) dans la colonne Français ; les autres, vides.
+function renforcerLigne(ligne, resultat) {
+  const st = resultat.parEpreuve?.[ligne.epreuve];
+  const n = st ? st.nonAtteint.T : null;
+  if (ligne.epreuve === 'maths') return { maths: n, francais: null };
+  const groupe = EPREUVES_RAPPORT.find((e) => e.id === ligne.epreuve)?.groupe;
+  if (groupe === GROUPE_FRANCAIS) return { maths: null, francais: n };
+  return { maths: null, francais: null };
+}
+
+// Sur la ligne ENSEMBLE : le total de la discipline (Maths ; Français = moyenne de ses épreuves sous le seuil)
+function renforcerEnsemble(resultat) {
+  return {
+    maths: resultat.parEpreuve?.maths?.nonAtteint?.T ?? null,
+    francais: resultat.parGroupe?.[GROUPE_FRANCAIS]?.nonAtteint?.T ?? null
+  };
+}
+
+// Les lignes à dessiner : une par épreuve évaluée pour la classe, puis ENSEMBLE
+function lignesDeLaFiche(resultat) {
+  const epreuves = LIGNES_FICHE_CLASSE.filter((l) => resultat.parEpreuve?.[l.epreuve]).map((l) => ({
+    label: l.label,
+    valeurs: groupesDeLigne(resultat, l.epreuve),
+    renforcer: renforcerLigne(l, resultat),
+    ensemble: false
+  }));
+  epreuves.push({
+    label: 'ENSEMBLE',
+    valeurs: groupesEnsemble(resultat),
+    renforcer: renforcerEnsemble(resultat),
+    ensemble: true
+  });
+  return epreuves;
+}
 
 /**
  * Construit la fiche de classe.
- * @param {{ classe: {nom: string, niveau: string}, etape: number, resultat: object, meta?: object, observations?: string }} donnees
+ * @param {{ classe: {nom: string, niveau: string}, etape: number, resultat: object, meta?: object, observations?: string, filigrane?: string }} donnees
  * @returns {{ page: {w: number, h: number}, formes: object[] }}
  */
 export function construireFicheClasse({ classe, etape, resultat, meta = {}, observations = '', filigrane = '' }) {
@@ -113,6 +164,7 @@ export function construireFicheClasse({ classe, etape, resultat, meta = {}, obse
   texte(page.w / 2, 40.5, `CLASSE : ${libelleClasse(classe)}`, { size: 9, bold: true });
 
   // --- Géométrie du tableau ---
+  const lignes = lignesDeLaFiche(resultat);
   const xGroupe = (i) => MARGE + COL_LABEL + i * 3 * COL_NUM;
   const xRenf = MARGE + COL_LABEL + GROUPES.length * 3 * COL_NUM;
   const xObs = xRenf + 2 * COL_RENF;
@@ -120,7 +172,7 @@ export function construireFicheClasse({ classe, etape, resultat, meta = {}, obse
   const yEntete = Y_TABLEAU;
   const ySous = yEntete + HAUT_ENTETE;
   const yCorps = ySous + HAUT_SOUS_ENTETE;
-  const hCorps = LIGNES_FICHE_CLASSE.length * HAUT_LIGNE;
+  const hCorps = lignes.length * HAUT_LIGNE;
   const yFin = yCorps + hCorps;
 
   // --- En-têtes ---
@@ -133,7 +185,7 @@ export function construireFicheClasse({ classe, etape, resultat, meta = {}, obse
     g.titre.forEach((ligne, k) => {
       texte(xGroupe(i) + 1.5 * COL_NUM, yEntete + HAUT_ENTETE / 2 + (k - (n - 1) / 2) * 3.2, ligne, {
         size: n > 1 ? 6.5 : 7.5,
-        bold: n === 1 || k === 0 ? n === 1 : false
+        bold: n === 1
       });
     });
     SEXES.forEach((s, j) => {
@@ -152,35 +204,35 @@ export function construireFicheClasse({ classe, etape, resultat, meta = {}, obse
   rect(xObs, yEntete, wObs, HAUT_ENTETE + HAUT_SOUS_ENTETE, { fill: FOND_ENTETE });
   texte(xObs + wObs / 2, yEntete + (HAUT_ENTETE + HAUT_SOUS_ENTETE) / 2, 'OBS', { size: 8, bold: true });
 
-  // --- Corps : une ligne par épreuve ---
-  LIGNES_FICHE_CLASSE.forEach((ligne, k) => {
+  // --- Corps : une ligne par épreuve, puis ENSEMBLE ---
+  lignes.forEach((ligne, k) => {
     const y = yCorps + k * HAUT_LIGNE;
-    rect(MARGE, y, COL_LABEL, HAUT_LIGNE);
+    const fond = ligne.ensemble ? { fill: FOND_ENSEMBLE } : {};
+    rect(MARGE, y, COL_LABEL, HAUT_LIGNE, fond);
     texte(MARGE + 1.5, y + HAUT_LIGNE / 2, ligne.label, { align: 'left', size: 8, bold: true });
 
-    const valeurs = groupesDeLigne(resultat, ligne.epreuve);
     GROUPES.forEach((g, i) => {
       SEXES.forEach((s, j) => {
-        const v = valeurs[g.cle][s];
-        rect(xGroupe(i) + j * COL_NUM, y, COL_NUM, HAUT_LIGNE);
+        const v = ligne.valeurs[g.cle][s];
+        rect(xGroupe(i) + j * COL_NUM, y, COL_NUM, HAUT_LIGNE, fond);
         texte(
           xGroupe(i) + (j + 0.5) * COL_NUM,
           y + HAUT_LIGNE / 2,
           g.cle === 'pourcentage' ? fmtPctCourt(v) : fmtEntier(v),
-          { size: g.cle === 'pourcentage' ? 7 : 9 }
+          { size: g.cle === 'pourcentage' ? 7 : 9, bold: ligne.ensemble }
         );
       });
     });
+
+    [ligne.renforcer.maths, ligne.renforcer.francais].forEach((v, j) => {
+      rect(xRenf + j * COL_RENF, y, COL_RENF, HAUT_LIGNE, fond);
+      if (v !== null) texte(xRenf + (j + 0.5) * COL_RENF, y + HAUT_LIGNE / 2, fmtEntier(v), { size: 9, bold: true });
+    });
   });
 
-  // --- Colonnes fusionnées : à renforcer et observations ---
-  [renforcerMaths(resultat), renforcerFrancais(resultat)].forEach((v, j) => {
-    rect(xRenf + j * COL_RENF, yCorps, COL_RENF, hCorps);
-    texte(xRenf + (j + 0.5) * COL_RENF, yCorps + hCorps / 2, fmtEntier(v), { size: 12, bold: true });
-  });
-
+  // --- Observations : une seule zone pour toutes les lignes ---
   rect(xObs, yCorps, wObs, hCorps);
-  envelopper(observations, 22, 26).forEach((ligne, k) => {
+  envelopper(observations, 22, 24).forEach((ligne, k) => {
     texte(xObs + 1.5, yCorps + 3.5 + k * 3.2, ligne, { align: 'left', size: 7 });
   });
 
@@ -216,13 +268,12 @@ export function tableauFicheClasse({ classe, etape, resultat, meta = {}, observa
     entete
   ];
 
-  LIGNES_FICHE_CLASSE.forEach((ligne, k) => {
-    const valeurs = groupesDeLigne(resultat, ligne.epreuve);
+  lignesDeLaFiche(resultat).forEach((ligne, k) => {
     const cellules = [ligne.label];
     for (const g of GROUPES) {
-      for (const s of SEXES) cellules.push(valeurs[g.cle][s] ?? '');
+      for (const s of SEXES) cellules.push(ligne.valeurs[g.cle][s] ?? '');
     }
-    cellules.push(k === 0 ? renforcerMaths(resultat) : '', k === 0 ? renforcerFrancais(resultat) : '', k === 0 ? observations : '');
+    cellules.push(ligne.renforcer.maths ?? '', ligne.renforcer.francais ?? '', k === 0 ? observations : '');
     lignes.push(cellules);
   });
 

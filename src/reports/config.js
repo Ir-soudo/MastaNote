@@ -37,3 +37,13 @@ export const ETAPES = [
 export function evaluationPourEtape(numero) {
   return ETAPES.find((e) => e.numero === numero)?.evaluationId ?? null;
 }
+
+// La Communication orale ne s'évalue qu'en CI et CP : elle n'entre pas dans la moyenne générale de CE1 à CM2
+// (confirmé par l'éditeur le 25/10/2026, et conforme au canevas de synthèse de Lokossa).
+export const NIVEAUX_AVEC_COMMUNICATION_ORALE = ['CI', 'CP'];
+
+/** Identifiants des épreuves évaluées pour un niveau (CI, CP, CE1, CE2, CM1, CM2), dans l'ordre de la fiche. */
+export function epreuvesPourNiveau(niveau) {
+  const avecCommunicationOrale = NIVEAUX_AVEC_COMMUNICATION_ORALE.includes(String(niveau ?? '').toUpperCase());
+  return EPREUVES_RAPPORT.filter((e) => avecCommunicationOrale || e.id !== 'communication_orale').map((e) => e.id);
+}
