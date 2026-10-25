@@ -17,6 +17,7 @@ import {
 import { formesVersSvg } from './svg.js';
 import { pdfDepuisJpeg } from './pdf.js';
 import { resultatExemple } from './exemple.js';
+import { epreuvesPourNiveau } from './config.js';
 
 const ELEVES = [
   { id: 'a', sexe: 'M', epreuves: { maths: { note: 12 }, dictee: { note: 9 } } },
@@ -91,7 +92,8 @@ test('formesVersSvg : document valide, textes échappés', () => {
 // ---------- Tableau pour Excel ----------
 test('tableauFicheClasse : en-têtes et lignes', () => {
   const tableau = tableauFicheClasse(donnees);
-  assert.equal(tableau.length, 4 + LIGNES_FICHE_CLASSE.length);
+  assert.equal(tableau.length, 4 + LIGNES_FICHE_CLASSE.length + 1); // + la ligne ENSEMBLE
+  assert.equal(tableau[tableau.length - 1][0], 'ENSEMBLE');
   const entete = tableau[3];
   assert.equal(entete.length, 1 + 15 + 3);
   assert.equal(entete[0], 'Épreuve');
@@ -121,6 +123,55 @@ test('exemple : données fictives cohérentes', () => {
   assert.equal(r.composes.T, 28); // 2 absents
   assert.ok(r.recus.T > 0 && r.recus.T <= r.composes.T);
   assert.equal(r.sansSexe, 0);
+});
+
+// ---------- Épreuves par niveau, ligne ENSEMBLE, « à renforcer » ----------
+test('epreuvesPourNiveau : la Communication orale n\'existe qu\'en CI et CP', () => {
+  for (const niveau of ['CI', 'CP', 'ci']) assert.ok(epreuvesPourNiveau(niveau).includes('communication_orale'));
+  assert.equal(epreuvesPourNiveau('CI').length, 10);
+  for (const niveau of ['CE1', 'CE2', 'CM1', 'CM2']) {
+    const ids = epreuvesPourNiveau(niveau);
+    assert.ok(!ids.includes('communication_orale'));
+    assert.equal(ids.length, 9);
+  }
+});
+
+test('fiche d\'une classe de CE1 : pas de ligne CO, une ligne ENSEMBLE', () => {
+  const r = calculerClasse(ELEVES, { epreuves: epreuvesPourNiveau('CE1') });
+  const textes = construireFicheClasse({ ...donnees, classe: { nom: 'CE1 A', niveau: 'CE1' }, resultat: r })
+    .formes.filter((f) => f.t === 'text')
+    .map((f) => f.s);
+  assert.ok(!textes.includes('CO'));
+  assert.ok(textes.includes('CE') && textes.includes('EE') && textes.includes('ENSEMBLE'));
+});
+
+test('exemple d\'un niveau CE1 : sans Communication orale', () => {
+  assert.equal(resultatExemple(0, 'CE1').parEpreuve.communication_orale, undefined);
+  assert.ok(resultatExemple(0, 'CI').parEpreuve.communication_orale);
+});
+
+test('ligne ENSEMBLE et « à renforcer » : chaque valeur est dans la bonne case (export Excel)', () => {
+  const eleves = [
+    { id: 'e1', sexe: 'M', epreuves: { maths: { note: 15 }, dictee: { note: 8 } } }, // moyenne 11,5 : reçu
+    { id: 'e2', sexe: 'F', epreuves: { maths: { note: 8 }, dictee: { note: 9 } } }, //  moyenne 8,5 : non reçue
+    { id: 'e3', sexe: 'M', absent: true },
+    { id: 'e4', sexe: 'F', epreuves: { maths: { note: 18 }, dictee: { note: 10 } } } // moyenne 14 : reçue
+  ];
+  const r = calculerClasse(eleves, { epreuves: ['maths', 'dictee'] });
+  const t = tableauFicheClasse({ classe: { nom: 'CE1 A', niveau: 'CE1' }, etape: 1, resultat: r });
+  assert.equal(t.length, 4 + 3); // MATHS, DICTEE, ENSEMBLE
+  const [maths, dictee, ensemble] = t.slice(4);
+  assert.deepEqual([maths[0], dictee[0], ensemble[0]], ['MATHS', 'DICTEE', 'ENSEMBLE']);
+
+  // Colonnes : inscrits G F T, ont composé G F T, maîtrise partielle G F T, seuil atteint G F T, pourcentage G F T
+  assert.deepEqual(maths.slice(1, 16), [2, 2, 4, 1, 2, 3, 0, 1, 1, 1, 1, 2, 100, 50, 66.66]);
+  assert.deepEqual(dictee.slice(1, 16), [2, 2, 4, 1, 2, 3, 1, 1, 2, 0, 1, 1, 0, 50, 33.33]);
+  assert.deepEqual(ensemble.slice(1, 16), [2, 2, 4, 1, 2, 3, 0, 1, 1, 1, 1, 2, 100, 50, 66.66]);
+
+  // À renforcer : MATHS dans « Maths », DICTEE (Français) dans « Français », ENSEMBLE reprend les deux
+  assert.deepEqual([maths[16], maths[17]], [1, '']);
+  assert.deepEqual([dictee[16], dictee[17]], ['', 2]);
+  assert.deepEqual([ensemble[16], ensemble[17]], [1, 2]);
 });
 
 // ---------- PDF ----------

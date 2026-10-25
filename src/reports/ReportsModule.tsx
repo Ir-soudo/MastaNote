@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { AlertTriangle, ArrowLeft, CheckCircle, ChevronDown, Download, Info, Share2 } from 'lucide-react';
-import { EPREUVES_RAPPORT, ETAPES, MODE_ARRONDI_DEFAUT, SEUIL_REUSSITE, evaluationPourEtape } from './config.js';
+import { EPREUVES_RAPPORT, ETAPES, MODE_ARRONDI_DEFAUT, SEUIL_REUSSITE, epreuvesPourNiveau, evaluationPourEtape } from './config.js';
 import { EPREUVES_IDS, calculerClasse, verifierDonnees } from './metrics.js';
 import { construireFicheClasse, tableauFicheClasse } from './layout.js';
 import { formesVersSvg } from './svg.js';
@@ -108,7 +108,8 @@ function construireEleves(classe: any, notes: any, extras: Extras, evaluationId:
 
   return classe.eleves.map((el: any) => {
     const epreuves: Record<string, { note: number; perf: number }> = {};
-    for (const id of EPREUVES_IDS as string[]) {
+    // Seules les épreuves du niveau comptent (la Communication orale n'existe qu'en CI et CP)
+    for (const id of epreuvesPourNiveau(classe.niveau) as string[]) {
       let note: number | null = null;
       let perf: number | null = null;
       if (id === 'communication_orale') {
@@ -184,8 +185,9 @@ export default function ReportsModule({
     () => (classe ? construireEleves(classe, notes, extras, evaluationId) : []),
     [classe, notes, extras, evaluationId]
   );
-  const verification = useMemo(() => verifierDonnees(eleves), [eleves]);
-  const resultat = useMemo(() => calculerClasse(eleves), [eleves]);
+  const epreuvesClasse = useMemo(() => epreuvesPourNiveau(classe?.niveau), [classe?.niveau]);
+  const verification = useMemo(() => verifierDonnees(eleves, epreuvesClasse), [eleves, epreuvesClasse]);
+  const resultat = useMemo(() => calculerClasse(eleves, { epreuves: epreuvesClasse }), [eleves, epreuvesClasse]);
 
   const cleObservations = `${classe?.id ?? ''}:${etape}`;
   const observations = store.observations[cleObservations] ?? '';
@@ -202,7 +204,7 @@ export default function ReportsModule({
   );
   const layout = useMemo(() => (donneesRapport ? construireFicheClasse(donneesRapport) : null), [donneesRapport]);
   const svgApercu = useMemo(() => (layout ? formesVersSvg(layout, { responsive: true }) : ''), [layout]);
-  const exemple = useMemo(() => resultatExemple(), []);
+  const exemple = useMemo(() => resultatExemple(0, 'CM2'), []); // la fiche d'exemple est celle d'une classe de CM2
 
   // Synthèse à transmettre au directeur (code + nom de fichier) : seulement si les données sont complètes
   const synthese = useMemo(() => {
@@ -321,7 +323,11 @@ export default function ReportsModule({
   // Résultat d'une classe de cet appareil pour l'étape choisie (utilisé par la vue « Toute l'école »)
   const calculerPourClasse = (c: any) => {
     const elevesClasse = construireEleves(c, notes, extras, evaluationId);
-    return { verification: verifierDonnees(elevesClasse), resultat: calculerClasse(elevesClasse) };
+    const epreuvesDeLaClasse = epreuvesPourNiveau(c.niveau);
+    return {
+      verification: verifierDonnees(elevesClasse, epreuvesDeLaClasse),
+      resultat: calculerClasse(elevesClasse, { epreuves: epreuvesDeLaClasse })
+    };
   };
 
   if (vue === 'ecole') {
@@ -733,7 +739,7 @@ export default function ReportsModule({
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-slate-800/60">
-                        {EPREUVES_RAPPORT.map((ep: any) => {
+                        {EPREUVES_RAPPORT.filter((ep: any) => resultat.parEpreuve[ep.id]).map((ep: any) => {
                           const st = resultat.parEpreuve[ep.id];
                           return (
                             <tr key={ep.id}>
@@ -823,7 +829,7 @@ export default function ReportsModule({
                           </div>
                         </div>
 
-                        <div className="flex items-center gap-2.5">
+                        <div className={`flex items-center gap-2.5 ${epreuvesClasse.includes('communication_orale') ? '' : 'hidden'}`}>
                           <span className="text-[10px] uppercase font-bold text-slate-500 w-12 leading-tight">Comm. orale</span>
                           <input
                             type="number"
