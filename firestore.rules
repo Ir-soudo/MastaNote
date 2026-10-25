@@ -1,0 +1,38 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Chaque compte ne peut lire, écrire ou supprimer que SES propres documents.
+    // Écrire exige une adresse e-mail vérifiée (les comptes Google le sont d'office).
+
+    // Une classe : utilisateurs/{uid}/classes/{idClasse}
+    match /utilisateurs/{uid}/classes/{classeId} {
+      allow read, delete: if request.auth != null && request.auth.uid == uid;
+      allow create, update: if request.auth != null
+        && request.auth.uid == uid
+        && request.auth.token.email_verified == true
+        && request.resource.data.keys().hasOnly(['donnees', 'version', 'nom', 'niveau', 'nbEleves', 'misAJour'])
+        && request.resource.data.donnees is string
+        && request.resource.data.donnees.size() < 900000
+        && request.resource.data.misAJour is timestamp;
+    }
+
+    // Réglages et données des modules : utilisateurs/{uid}/etat/reglages ou modules
+    match /utilisateurs/{uid}/etat/{docId} {
+      allow read, delete: if request.auth != null && request.auth.uid == uid;
+      allow create, update: if request.auth != null
+        && request.auth.uid == uid
+        && request.auth.token.email_verified == true
+        && docId in ['reglages', 'modules']
+        && request.resource.data.keys().hasOnly(['donnees', 'version', 'misAJour'])
+        && request.resource.data.donnees is string
+        && request.resource.data.donnees.size() < 900000
+        && request.resource.data.misAJour is timestamp;
+    }
+
+    // Tout le reste reste fermé, comme aujourd'hui.
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}
