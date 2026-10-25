@@ -157,8 +157,12 @@ const loadPersistedState = (uid) => {
     // La copie d'origine n'est jamais supprimée : aucune perte possible.
     if (raw === null && uid) {
       const legacy = localStorage.getItem(STORAGE_KEY);
-      if (legacy !== null) {
+      // Les données d'avant la mise à jour ne sont reprises que par le PREMIER compte qui se connecte sur cet appareil.
+      const cleProprietaire = `${STORAGE_KEY}:proprietaire-initial`;
+      const proprietaire = localStorage.getItem(cleProprietaire);
+      if (legacy !== null && (proprietaire === null || proprietaire === uid)) {
         localStorage.setItem(key, legacy);
+        localStorage.setItem(cleProprietaire, uid);
         raw = legacy;
       }
     }
