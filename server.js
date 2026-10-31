@@ -1,6 +1,7 @@
 import express from 'express';
 import cors from 'cors';
-import { creerSecurite, reglesParDefaut } from './securite.js';
+import { creerSecurite, extraireJeton, reglesParDefaut } from './securite.js';
+import { compterLicences, creerCache } from './statistiques.js';
 
 const app = express();
 
@@ -557,6 +558,39 @@ app.post('/api/assistant', async (req, res) => {
   } catch (err) {
     console.error('Erreur /api/assistant:', err);
     return res.status(500).json({ error: "Erreur interne du serveur lors de la génération de la réponse." });
+  }
+});
+
+// ==================================================================
+// STATISTIQUES D'ABONNEMENT — réservées à l'éditeur, en lecture seule.
+// Ne renvoie que des nombres (jamais de nom, d'e-mail ni de clé de licence).
+// Variables Render : ADMIN_UIDS (identifiants Firebase autorisés, séparés par des virgules) et
+// CHARIOW_STATS_KEY (clé Chariow en lecture seule, droit « licenses.read » uniquement).
+// ==================================================================
+const ADMIN_UIDS = (process.env.ADMIN_UIDS || '').split(',').map((s) => s.trim()).filter(Boolean);
+const CHARIOW_STATS_KEY = process.env.CHARIOW_STATS_KEY;
+const cacheStatistiques = creerCache(5 * 60 * 1000);
+
+app.get('/api/admin/stats', async (req, res) => {
+  // Contrôle d'identité PROPRE à cette route : il s'applique même si le reste du serveur est en mode « observe »
+  let auth;
+  try {
+    auth = await verifierJeton(extraireJeton(req));
+  } catch (err) {
+    return res.status(503).json({ error: 'Vérification momentanément indisponible.' });
+  }
+  if (auth.etat !== 'valide' || !ADMIN_UIDS.includes(auth.uid)) {
+    return res.status(403).json({ error: 'Accès réservé.' });
+  }
+  if (!CHARIOW_STATS_KEY) {
+    return res.status(503).json({ error: 'Clé de lecture des statistiques non configurée sur le serveur.' });
+  }
+  try {
+    const statistiques = await cacheStatistiques.obtenir('licences', () => compterLicences({ cle: CHARIOW_STATS_KEY }));
+    return res.json(statistiques);
+  } catch (err) {
+    console.error('Erreur /api/admin/stats :', err.message); // message sûr, sans donnée de client
+    return res.status(502).json({ error: err.message || 'Statistiques indisponibles.' });
   }
 });
 
