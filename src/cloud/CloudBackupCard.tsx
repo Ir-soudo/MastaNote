@@ -22,7 +22,7 @@ import {
 
 type Info = { existe: boolean; date: Date | null; classes: number; eleves: number };
 
-export default function CloudBackupCard({
+function CloudBackupCardInterne({
   authUser,
   getEtat,
   onRestore,
@@ -252,4 +252,12 @@ export default function CloudBackupCard({
       {erreur && <p className="text-xs text-rose-300">{erreur}</p>}
     </div>
   );
+}
+
+// Interrupteur de mise en service : le cadre n'apparaît que si la variable VITE_CLOUD_BACKUP vaut « on » au moment de
+// la construction du site (Render, service frontend ; fichier .env pour vos essais). Tant qu'elle est absente, la
+// fonction reste invisible pour tous les utilisateurs.
+export default function CloudBackupCard(props: React.ComponentProps<typeof CloudBackupCardInterne>) {
+  if (import.meta.env.VITE_CLOUD_BACKUP !== 'on') return null;
+  return <CloudBackupCardInterne {...props} />;
 }
