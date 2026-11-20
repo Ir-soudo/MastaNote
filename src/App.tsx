@@ -4,6 +4,8 @@ import AuthProvider, { AuthScreen, useAuth } from './AuthGate';
 import { getAuthHeaders } from './firebase';
 import PhoneMockup from './PhoneMockup';
 import ReportsModule from './reports/ReportsModule';
+import AffiliationPanel, { AFFILIATION_ACTIVE } from './AffiliationPanel';
+import { Share2 as IconeAffiliation } from 'lucide-react';
 import CloudBackupCard from './cloud/CloudBackupCard';
 import {
   BookOpen, Users, Plus, Download, Mic, MicOff, CheckCircle, CreditCard,
@@ -579,6 +581,7 @@ function MastaNoteApp() {
 
   const [selectedClassId, setSelectedClassId] = useState('class-1');
   const [activeTab, setActiveTab] = useState('dashboard');
+  const [affiliationOpen, setAffiliationOpen] = useState(false);
   const [activeMatiere, setActiveMatiere] = useState('maths');
   const [activeEvaluation, setActiveEvaluation] = useState('sommative1');
 
@@ -2391,6 +2394,12 @@ Si une information est illisible ou absente, mets une chaîne vide "" pour ce ch
                   <FileSpreadsheet className="w-4 h-4 text-indigo-400" />
                   Rapports d'étape
                 </button>
+                {AFFILIATION_ACTIVE && (
+                  <button onClick={() => { setMenuOpen(false); setAffiliationOpen(true); }} className={drawerItemClass}>
+                    <IconeAffiliation className="w-4 h-4 text-emerald-400" />
+                    Gagner 30 %
+                  </button>
+                )}
                 <button onClick={() => goToTab('parametres')} className={drawerItemClass}>
                   <Settings className="w-4 h-4 text-slate-400" />
                   Paramètres
@@ -3687,6 +3696,21 @@ Si une information est illisible ou absente, mets une chaîne vide "" pour ce ch
                   </table>
                 </div>
               )}
+            </div>
+          </div>
+        )}
+
+        {/* ---------------- GAGNER 30 % (affiliation) ---------------- */}
+        {AFFILIATION_ACTIVE && affiliationOpen && (
+          <div className="fixed inset-0 z-50 bg-slate-950 overflow-y-auto p-4 sm:p-8">
+            <div className="max-w-2xl mx-auto w-full">
+              <button
+                onClick={() => setAffiliationOpen(false)}
+                className="mb-4 text-xs font-bold text-indigo-300 hover:text-indigo-200"
+              >
+                ← Retour à l'application
+              </button>
+              <AffiliationPanel uid={authUser?.uid} notify={triggerNotif} />
             </div>
           </div>
         )}
