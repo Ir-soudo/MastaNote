@@ -5,6 +5,8 @@ import { getAuthHeaders } from './firebase';
 import PhoneMockup from './PhoneMockup';
 import ReportsModule from './reports/ReportsModule';
 import AffiliationPanel, { AFFILIATION_ACTIVE } from './AffiliationPanel';
+import StudioPhotos, { STUDIO_PHOTO_ACTIVE } from './photos/StudioPhotos';
+import { Camera as IconeStudioPhoto } from 'lucide-react';
 import { Share2 as IconeAffiliation } from 'lucide-react';
 import CloudBackupCard from './cloud/CloudBackupCard';
 import {
@@ -582,6 +584,7 @@ function MastaNoteApp() {
   const [selectedClassId, setSelectedClassId] = useState('class-1');
   const [activeTab, setActiveTab] = useState('dashboard');
   const [affiliationOpen, setAffiliationOpen] = useState(false);
+  const [studioPhotoOpen, setStudioPhotoOpen] = useState(false);
   const [activeMatiere, setActiveMatiere] = useState('maths');
   const [activeEvaluation, setActiveEvaluation] = useState('sommative1');
 
@@ -2394,6 +2397,12 @@ Si une information est illisible ou absente, mets une chaîne vide "" pour ce ch
                   <FileSpreadsheet className="w-4 h-4 text-indigo-400" />
                   Rapports d'étape
                 </button>
+                {STUDIO_PHOTO_ACTIVE && (
+                  <button onClick={() => { setMenuOpen(false); setStudioPhotoOpen(true); }} className={drawerItemClass}>
+                    <IconeStudioPhoto className="w-4 h-4 text-sky-400" />
+                    Studio Photo EducMaster
+                  </button>
+                )}
                 {AFFILIATION_ACTIVE && (
                   <button onClick={() => { setMenuOpen(false); setAffiliationOpen(true); }} className={drawerItemClass}>
                     <IconeAffiliation className="w-4 h-4 text-emerald-400" />
@@ -3696,6 +3705,21 @@ Si une information est illisible ou absente, mets une chaîne vide "" pour ce ch
                   </table>
                 </div>
               )}
+            </div>
+          </div>
+        )}
+
+        {/* ---------------- STUDIO PHOTO EDUCMASTER ---------------- */}
+        {STUDIO_PHOTO_ACTIVE && studioPhotoOpen && (
+          <div className="fixed inset-0 z-50 bg-slate-950 overflow-y-auto p-4 sm:p-8">
+            <div className="max-w-2xl mx-auto w-full">
+              <button
+                onClick={() => setStudioPhotoOpen(false)}
+                className="mb-4 text-xs font-bold text-indigo-300 hover:text-indigo-200"
+              >
+                ← Retour à l'application
+              </button>
+              <StudioPhotos uid={authUser?.uid} classes={classes} notify={triggerNotif} />
             </div>
           </div>
         )}
