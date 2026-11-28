@@ -1,7 +1,7 @@
 import React, { useMemo, useState } from 'react';
 import { Camera, Download, FileSpreadsheet, ImagePlus, Share2 } from 'lucide-react';
 import { associerFichiers, cadrageDepuisVisage, cadrageInitial, creerZip, genererCsv, lignesRapport, messageAlerte, nomFichier, preparerExport } from './noyau.js';
-import { chargerImage, detecterVisage, libererImage, partagerFichiers, produirePhoto, telechargerBlob } from './navigateur.js';
+import { chargerImage, detecterVisage, libererImage, octetsVersBlob, partagerFichiers, produirePhoto, telechargerBlob } from './navigateur.js';
 
 // ==========================================================
 // SUIVI, ASSOCIATION DES PHOTOS EXISTANTES, EXPORT
@@ -107,6 +107,39 @@ export default function RapportView({ eleves, photos, reglages, onRefaire, onEnr
     } catch (err: any) {
       notify(err?.message || 'Partage impossible.', 'error');
     }
+  };
+
+  // ---------- téléchargement direct des photos (JPEG, avec leur nom final) ----------
+
+  const telechargerPhoto = (l: any) => {
+    try {
+      telechargerBlob(octetsVersBlob(l.photo.donnees), l.fichier);
+    } catch (err: any) {
+      notify(err?.message || 'Téléchargement impossible.', 'error');
+    }
+  };
+
+  const partagerPhoto = async (l: any) => {
+    try {
+      const fichier = new File([octetsVersBlob(l.photo.donnees)], l.fichier, { type: 'image/jpeg' });
+      const reussi = await partagerFichiers([fichier], nomComplet(l.eleve));
+      if (!reussi) notify("Le partage n'est pas disponible ici : utilisez « Télécharger ».", 'error');
+    } catch (err: any) {
+      notify(err?.message || 'Partage impossible.', 'error');
+    }
+  };
+
+  const telechargerUneParUne = async () => {
+    const liste = exportPrepare.correspondances.filter((c: any) => photos.has(c.eleveId));
+    if (liste.length === 0) {
+      notify('Aucune photo à télécharger.', 'error');
+      return;
+    }
+    for (const c of liste) {
+      telechargerBlob(octetsVersBlob(photos.get(c.eleveId).donnees), c.nom);
+      await new Promise((resolve) => setTimeout(resolve, 400)); // le navigateur n'accepte pas des téléchargements simultanés
+    }
+    notify(`${liste.length} photo(s) téléchargée(s). Si certaines manquent, autorisez les téléchargements multiples dans le navigateur.`, 'success');
   };
 
   // ---------- photos déjà prises : association puis application ----------
@@ -245,10 +278,24 @@ export default function RapportView({ eleves, photos, reglages, onRefaire, onEnr
                     </ul>
                   )}
                 </div>
-                <button onClick={() => onRefaire(l.eleve.id)} className={`${secondaire} shrink-0`}>
-                  <Camera className="w-3.5 h-3.5" />
-                  {l.photo ? 'Refaire' : 'Prendre'}
-                </button>
+                <div className="flex flex-col gap-2 shrink-0">
+                  <button onClick={() => onRefaire(l.eleve.id)} className={secondaire}>
+                    <Camera className="w-3.5 h-3.5" />
+                    {l.photo ? 'Refaire' : 'Prendre'}
+                  </button>
+                  {l.photo && (
+                    <button onClick={() => telechargerPhoto(l)} className={secondaire}>
+                      <Download className="w-3.5 h-3.5" />
+                      Télécharger
+                    </button>
+                  )}
+                  {l.photo && typeof navigator !== 'undefined' && typeof navigator.share === 'function' && (
+                    <button onClick={() => partagerPhoto(l)} className={secondaire}>
+                      <Share2 className="w-3.5 h-3.5" />
+                      Partager
+                    </button>
+                  )}
+                </div>
               </li>
             ))}
           </ul>
@@ -335,10 +382,17 @@ export default function RapportView({ eleves, photos, reglages, onRefaire, onEnr
           {reglages.zip?.inclureRapport ? 'Le rapport CSV y est ajouté (réglage de Normes & Profil).' : 'Le rapport CSV se télécharge à part, pour ne pas gêner l’import.'}
         </p>
         {total - avecPhoto > 0 && <p className="text-xs text-slate-500">{total - avecPhoto} élève(s) sans photo ne seront pas dans le ZIP.</p>}
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+        <p className="text-xs text-slate-400 leading-relaxed">
+          Format des photos : JPEG (.jpg), aux dimensions et au poids réglés dans Normes &amp; Profil. Chaque photo peut aussi se télécharger seule, avec son nom final, ou toutes d&apos;un coup, une par une.
+        </p>
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
           <button onClick={telechargerZip} disabled={avecPhoto === 0} className={principal}>
             <Download className="w-4 h-4" />
             ZIP des photos
+          </button>
+          <button onClick={telechargerUneParUne} disabled={avecPhoto === 0} className={secondaire}>
+            <Download className="w-4 h-4" />
+            Photos une par une (.jpg)
           </button>
           <button onClick={telechargerCsv} disabled={total === 0} className={secondaire}>
             <FileSpreadsheet className="w-4 h-4" />
